@@ -121,3 +121,48 @@ The included validator checks catalog shape, safe paths, unique IDs, and local s
 Review all changes to `SKILL.md`, scripts, and reference files before merging. Skills contain instructions for AI agents; treat contributions and external upstream sources as executable-influence supply-chain inputs. Keep third-party licenses and provenance with their files. `skills/serena-usage` is a third-party bundle (MIT, Copyright (c) 2026 Sithu Win San) and keeps its upstream `LICENSE.txt`, `CHANGELOG.md`, and `scripts/serena-memory-backup.ps1` unmodified. `skills/serena-usage/SKILL.md` links to sibling skills (for example `../development-workflow/SKILL.md`) that this registry does not ship; those links resolve only where the consumer has also installed them. The consumer's `skills-lock.json` records installed origins, so changing or removing a registry does not implicitly retarget updates for installed skills.
 
 This starter intentionally does **not** use `skills-registry/index.json`: that file belongs to AutoSkills' former bundled review index, not its user-registry catalog format.
+
+## Advisory Laya classification (GitHub Actions)
+
+The [Classify skills with Laya](.github/workflows/classify-skills.yml) workflow uses
+[the TypeScript Laya runtime](https://github.com/NandhaKishorM/laya/tree/main/laya-ts)
+to produce **review-only** classification reports. It does not write to
+`catalog.json`, commit changes, or create automatic recommendation mappings.
+
+- **Pull requests** that touch classifier-related files run fast fixture tests without loading a model.
+- **Pushes to `main`** touching skills, catalog, or the workflow run classification in `catalog` mode.
+- **Actions → Classify skills with Laya → Run workflow** allows choosing
+  `catalog` (suggest existing technology IDs) or `map` (group the built-in AutoSkills
+  skills into domains), and selecting a limit and confidence threshold.
+- Download `laya-catalog-classifications` or `laya-map-classifications` from
+  the completed run's **Artifacts** section. `proposedAdditions` are
+  suggestions for manual review, not automatically approved mappings.
+
+The workflow pins the Laya source checkout to commit
+`4ac226d5ee88ed6df8db288a05c766d7a34ee682`, builds `laya-ts`, and
+exports the public `convaiinnovations/laya` checkpoint to split ONNX on the
+first inference run (subsequent runs can restore the ONNX model from the Actions
+cache). The model is large; initial exports may take substantial runner time,
+disk space and network bandwidth. The GitHub-hosted runner performs real
+inference only for trusted default-branch pushes or manual runs, never for
+untrusted pull requests. The checkpoint download is not currently pinned to a
+Hugging Face revision; for bit-for-bit reproducibility, pin the model snapshot
+and update the cache key.
+
+Run the classifier locally (requires the TypeScript parser, a built Laya runtime
+and an exported ONNX model; see [Laya's export guide](https://github.com/NandhaKishorM/laya/blob/main/laya-ts/README.md)):
+
+```bash
+npm install --no-save typescript
+node scripts/classify-skills.mjs --inspect-map
+node scripts/classify-skills.mjs --mode catalog --model ./model \
+  --laya ../laya/laya-ts/dist/index.js --output ./skill-classifications.json
+node scripts/classify-skills.mjs --mode map --model ./model \
+  --laya ../laya/laya-ts/dist/index.js --output ./autoskills-classified.json
+node --test tests/classify-skills.test.mjs
+```
+
+The `--write` CLI flag can add only sufficiently high-confidence suggestions
+while preserving existing technology IDs, but the GitHub Action deliberately
+does **not** enable it. Review classifications against actual skill behavior;
+Laya's output confidence is not independently calibrated on this registry.
