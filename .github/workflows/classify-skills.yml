@@ -1,0 +1,126 @@
+name: Classify skills with Laya
+
+on:
+  pull_request:
+    paths:
+      - 'catalog.json'
+      - 'scripts/classify-skills.mjs'
+      - 'tests/classify-skills.test.mjs'
+      - '.github/workflows/classify-skills.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'catalog.json'
+      - 'skills/**'
+      - 'scripts/classify-skills.mjs'
+      - '.github/workflows/classify-skills.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Classify registry entries or the built-in AutoSkills map'
+        type: choice
+        options: [catalog, map]
+        default: catalog
+        required: true
+      limit:
+        description: 'Maximum number of skills to classify'
+        type: number
+        default: 100
+        required: true
+      threshold:
+        description: 'Minimum P(yes) for a suggested technology'
+        type: choice
+        options: ['0.80', '0.90', '0.95']
+        default: '0.90'
+        required: true
+
+# No catalog commits or pull-request comments; classification is advisory.
+permissions:
+  contents: read
+
+concurrency:
+  group: laya-classification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Test classifier (no model download)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install AST parser
+        run: npm install --no-save --ignore-scripts typescript
+      - name: Run classifier fixture tests
+        run: node --test tests/classify-skills.test.mjs
+
+  classify:
+    name: Build ONNX model and classify skills
+    needs: verify
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MODE: ${{ inputs.mode || 'catalog' }}
+      LIMIT: ${{ inputs.limit || '100' }}
+      THRESHOLD: ${{ inputs.threshold || '0.90' }}
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: NandhaKishorM/laya
+          ref: 4ac226d5ee88ed6df8db288a05c766d7a34ee682
+          path: .laya-src
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build Laya TypeScript runtime
+        run: |
+          npm install --no-save --ignore-scripts typescript
+          npm install --prefix .laya-src/laya-ts
+          npm run build --prefix .laya-src/laya-ts
+      - name: Restore exported ONNX model
+        id: model-cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/laya-model
+          key: laya-onnx-4ac226d5ee88-english-v1
+      - name: Export split ONNX weights (cache miss only)
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install -e './.laya-src[onnx]'
+          python .laya-src/laya-ts/scripts/export_onnx.py \
+            --repo convaiinnovations/laya \
+            --out-dir .cache/laya-model
+      - name: Reconcile local catalog without pushing
+        if: env.MODE == 'catalog'
+        run: npm run catalog:sync
+      - name: Classify and write JSON report
+        run: |
+          mkdir -p reports
+          node scripts/classify-skills.mjs \
+            --mode "$MODE" \
+            --catalog catalog.json \
+            --model ./.cache/laya-model \
+            --laya ./.laya-src/laya-ts/dist/index.js \
+            --threshold "$THRESHOLD" \
+            --limit "$LIMIT" \
+            --output reports/laya-classifications.json
+      - name: Upload classification report
+        uses: actions/upload-artifact@v4
+        with:
+          name: laya-${{ env.MODE }}-classifications
+          path: reports/laya-classifications.json
+          if-no-files-found: error
+          retention-days: 30
