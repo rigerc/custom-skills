@@ -12,7 +12,21 @@ A standalone GitHub-hosted skills registry for the [`rigerc/autoskills`](https:/
 │   ├── release-checklist/
 │   │   ├── SKILL.md
 │   │   └── references/checklist.md
-│   └── incident-runbook/SKILL.md
+│   ├── incident-runbook/SKILL.md
+│   ├── gum-cli/
+│   │   ├── SKILL.md
+│   │   ├── README.md
+│   │   └── references/gum-reference.md
+│   ├── ink/
+│   │   ├── SKILL.md
+│   │   └── references/{components,hooks,patterns,render-api}.md
+│   └── serena-usage/
+│       ├── SKILL.md
+│       ├── CHANGELOG.md
+│       ├── LICENSE.txt
+│       ├── examples/refactoring-workflow.md
+│       ├── references/{memory-management,symbol-navigation}.md
+│       └── scripts/serena-memory-backup.ps1
 ├── scripts/
 │   ├── sync-catalog.mjs
 │   └── validate-catalog.mjs
@@ -48,6 +62,9 @@ A standalone GitHub-hosted skills registry for the [`rigerc/autoskills`](https:/
 | `react-code-review` | `"technologies": ["react", "nextjs"]` | Recommended when React **or** Next.js is detected. |
 | `release-checklist` | `"always": true` | Recommended on every project. |
 | `incident-runbook` | No mapping | Available for explicit selection; not installed by `-y` unless otherwise recommended. |
+| `gum-cli` | No mapping | Available for explicit selection; not installed by `-y` unless otherwise recommended. |
+| `ink` | No mapping | Available for explicit selection; not installed by `-y` unless otherwise recommended. |
+| `serena-usage` | No mapping | Available for explicit selection; not installed by `-y` unless otherwise recommended. |
 
 Built-in AutoSkills recommendations remain enabled alongside this registry. The technology IDs must exist in the AutoSkills `SKILLS_MAP` used by the installed CLI. The example IDs `react` and `nextjs` are supported in the referenced fork. A catalog cannot define new detection rules.
 
@@ -107,6 +124,6 @@ The included validator checks catalog shape, safe paths, unique IDs, and local s
 
 ## Maintenance and trust
 
-Review all changes to `SKILL.md`, scripts, and reference files before merging. Skills contain instructions for AI agents; treat contributions and external upstream sources as executable-influence supply-chain inputs. Keep third-party licenses and provenance with their files. The consumer's `skills-lock.json` records installed origins, so changing or removing a registry does not implicitly retarget updates for installed skills.
+Review all changes to `SKILL.md`, scripts, and reference files before merging. Skills contain instructions for AI agents; treat contributions and external upstream sources as executable-influence supply-chain inputs. Keep third-party licenses and provenance with their files. `skills/serena-usage` is a third-party bundle (MIT, Copyright (c) 2026 Sithu Win San) and keeps its upstream `LICENSE.txt`, `CHANGELOG.md`, and `scripts/serena-memory-backup.ps1` unmodified. `skills/serena-usage/SKILL.md` links to sibling skills (for example `../development-workflow/SKILL.md`) that this registry does not ship; those links resolve only where the consumer has also installed them. The consumer's `skills-lock.json` records installed origins, so changing or removing a registry does not implicitly retarget updates for installed skills.
 
 This starter intentionally does **not** use `skills-registry/index.json`: that file belongs to AutoSkills' former bundled review index, not its user-registry catalog format.

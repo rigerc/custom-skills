@@ -20,6 +20,21 @@
       "id": "incident-runbook",
       "description": "Structure incident response, diagnosis, communication, mitigation and after-action review.",
       "path": "skills/incident-runbook"
+    },
+    {
+      "id": "gum-cli",
+      "description": "Use Charmbracelet Gum to build polished interactive shell scripts with prompts, selectors, filters, spinners, formatting, tables, pagers, logging, and styled terminal output. Use when writing, reviewing, or debugging shell workflows that invoke the `gum` CLI.",
+      "path": "skills/gum-cli"
+    },
+    {
+      "id": "ink",
+      "description": "Build, debug, and test terminal UIs and interactive CLIs with Ink (vadimdemedes/ink), \"React for CLIs\". Use this skill whenever the user mentions Ink, `ink` imports (`import {render, Box, Text} from 'ink'`), create-ink-app, ink-testing-library, or ink-* packages (ink-text-input, ink-spinner, ink-select-input), or wants to build a CLI/TUI/terminal dashboard/interactive prompt/spinner/progress UI/full-screen terminal app using React components, hooks, or Flexbox layout in the terminal, even if they never say \"Ink\" explicitly. Also use it for fixing Ink problems such as flickering output, app exiting immediately, useInput raw-mode errors, console.log mixing with the UI, text wrapping or layout issues, or testing Ink components.",
+      "path": "skills/ink"
+    },
+    {
+      "id": "serena-usage",
+      "description": "Serena MCP for project memory and code navigation. Use when managing Serena memories, navigating symbols, performing intelligent refactoring, or maintaining context/continuity across AI agent sessions.",
+      "path": "skills/serena-usage"
     }
   ]
 }
