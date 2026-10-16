@@ -12,7 +12,7 @@ The TypeScript map is parsed as data using the TypeScript AST, **not executed**.
 Node.js 22+ recommended. From a clone of `rigerc/custom-skills`:
 
 ```bash
-npm install --no-save typescript
+npm install --no-save typescript@5.9.3
 # If using a laya-ts package installed from npm, also install onnxruntime-node.
 ```
 
@@ -74,13 +74,62 @@ If you installed `laya-ts` as an npm package, omit `--laya`. If `laya` lives in 
 - If you use `--write`, consider running `npm run catalog:check` and `npm test` from the custom registry afterward.
 ## GitHub Actions integration
 
-[Classify AutoSkills skills with Laya](../.github/workflows/classify-skills.yml) runs after relevant pushes, produces an advisory report each Monday at 06:19 UTC, and supports manual runs through **Actions → Classify AutoSkills skills with Laya → Run workflow** after this workflow has merged into the default branch.
+The [Classify skills with Laya](../.github/workflows/classify-skills.yml) workflow
+has two separate trust levels:
 
-- Scheduled runs use **catalog** mode (up to 100 records by default), write **only** a downloadable 30-day JSON report, and do not modify `catalog.json`.
-- Manual runs can select **catalog** or **map** mode, and adjust the record limit (100 by default). By default they also generate only a report.
-- For a manual **catalog** run on the **default branch**, enable **propose_updates** to append IDs with P(yes) ≥ 0.90, validate the catalog, and create a separate **review PR** with only `catalog.json`. The update is never merged automatically.
-- The workflow pins the Laya source revision, builds `laya-ts`, and exports the English checkpoint to split ONNX if not already cached. This requires downloading a large (~843 MB) Hugging Face checkpoint and exporting large ONNX graphs; cache misses can take substantial runner time, disk, and memory. The ONNX model is **not checked into git**.
-- Repository settings must allow GitHub Actions to create pull requests for the optional **propose_updates** mode to succeed; the workflow uses `contents:write` and `pull-requests:write` only in its job.
-- The TypeScript parser and mocked Laya tests run in ordinary PR validation without downloading model weights. Actual Laya inference is run only by the classification workflow.
+1. **PRs:** run the TypeScript-AST parser and mock-Laya regression tests only.
+   There is no model download and no write token.
+2. **Pushes to `main`, weekly schedules, or manual dispatch:** run real ONNX
+   classification in read-only mode. A successful run uploads its JSON report
+   as a 30-day artifact and writes a short summary with classification counts,
+   technology suggestions, and manual-review flags.
 
-After a PR changes skills, the catalog sync action may update descriptions independently; review the generated Laya tags before merging any machine-created PR.
+A manual run selects `catalog` or `map` mode, a record limit, and a
+probability threshold. Weekly runs default to catalog mode. Report confidence
+is **not calibrated** for the custom skill registry, so all suggestions require
+human review.
+
+### Faster startup with a prepared model cache
+
+The [Warm Laya model cache](../.github/workflows/warm-laya-cache.yml)
+workflow runs on **Sunday and Thursday at 05:43 UTC**, or manually via
+**Actions → Warm Laya model cache → Run workflow**. It prepares the English
+split-ONNX checkpoint once and saves the model files into a shared GitHub
+Actions cache. The Monday **06:19 UTC** report ordinarily restores that cache
+instead of exporting a fresh model.
+
+Both workflows call [the same composite model action](../.github/actions/laya-model/action.yml)
+to restore, validate, export on a miss, and save the ONNX files. On a cache
+miss it uses pinned **CPU-only PyTorch 2.6.0**, avoiding the download of
+unused CUDA dependencies. Incomplete cached bundles cause an explicit
+failure instead of a misleading inference error. To invalidate a corrupt or
+obsolete cache, increment the version in the composite action's cache key.
+
+The first cache miss still requires the large Hugging Face checkpoint and
+ONNX export, which can be slow or exceed a hosted runner's available resources.
+Cache availability, retention, and quotas depend on GitHub; warming is a
+best-effort optimization, not a guarantee. The Laya source checkout is pinned
+to `4ac226d5ee88ed6df8db288a05c766d7a34ee682`. The Hugging Face
+checkpoint download is **not** pinned to a snapshot revision, so the cache
+key is not a cryptographic model provenance guarantee. Model weights are not
+committed to this repository.
+
+### Optional reviewed catalog updates
+
+A manual **catalog** run on the **default branch** can enable
+`propose_updates`. The classifier may append valid `SKILLS_MAP` technology
+IDs whose model score passes the chosen threshold; existing tags are retained.
+It then publishes the proposed catalog as a short-lived artifact. A **separate
+`propose` job** downloads this artifact, runs catalog synchronization checks
+and the complete tests, and opens a review-only PR affecting `catalog.json`.
+
+This separates permissions: the heavy classifier job has **contents: read**,
+while only the explicitly requested proposal job receives
+**contents: write** and **pull-requests: write**. Neither job merges proposals.
+The repository must enable **Settings → Actions → General → Allow GitHub
+Actions to create and approve pull requests** for proposal creation to work.
+
+The [Sync AutoSkills catalog](../.github/workflows/sync-catalog.yml)
+workflow remains separate and now installs the same pinned TypeScript parser
+before its complete test suite. It continues to own catalog description/path
+reconciliation, not Laya-generated technology tags.
