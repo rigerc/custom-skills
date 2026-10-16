@@ -61,7 +61,7 @@ jobs:
         with:
           node-version: '22'
       - name: Install AST parser
-        run: npm install --no-save --ignore-scripts typescript
+        run: npm install --no-save --ignore-scripts typescript@5.9.3
       - name: Run classifier fixture tests
         run: node --test tests/classify-skills.test.mjs
 
@@ -100,7 +100,7 @@ jobs:
           python-version: '3.11'
       - name: Build Laya TypeScript runtime
         run: |
-          npm install --no-save --ignore-scripts typescript
+          npm install --no-save --ignore-scripts typescript@5.9.3
           npm install --prefix .laya-src/laya-ts
           npm run build --prefix .laya-src/laya-ts
       - name: Restore exported ONNX model
