@@ -34,7 +34,14 @@ on:
         default: '0.90'
         required: true
 
-# No catalog commits or pull-request comments; classification is advisory.
+      propose_updates:
+        description: 'Create a review PR proposing high-confidence catalog technology tags'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '19 6 * * 1' # Weekly advisory report; never applies catalog edits.
+
+# Weekly and push runs are advisory. Only an explicit manual request can propose a PR.
 permissions:
   contents: read
 
@@ -54,21 +61,27 @@ jobs:
         with:
           node-version: '22'
       - name: Install AST parser
-        run: npm install --no-save --ignore-scripts typescript
+        run: npm install --no-save --ignore-scripts typescript@5.9.3
       - name: Run classifier fixture tests
         run: node --test tests/classify-skills.test.mjs
 
   classify:
     name: Build ONNX model and classify skills
     needs: verify
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: write
+      pull-requests: write
     env:
       MODE: ${{ inputs.mode || 'catalog' }}
       LIMIT: ${{ inputs.limit || '100' }}
       THRESHOLD: ${{ inputs.threshold || '0.90' }}
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
+      PROPOSE_UPDATES: ${{ inputs.propose_updates || 'false' }}
+      IS_MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+      ON_DEFAULT_BRANCH: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,7 +100,7 @@ jobs:
           python-version: '3.11'
       - name: Build Laya TypeScript runtime
         run: |
-          npm install --no-save --ignore-scripts typescript
+          npm install --no-save --ignore-scripts typescript@5.9.3
           npm install --prefix .laya-src/laya-ts
           npm run build --prefix .laya-src/laya-ts
       - name: Restore exported ONNX model
@@ -99,7 +112,7 @@ jobs:
       - name: Export split ONNX weights (cache miss only)
         if: steps.model-cache.outputs.cache-hit != 'true'
         run: |
-          python -m pip install -e './.laya-src[onnx]'
+          python -m pip install -e './.laya-src[onnx]' onnxscript
           python .laya-src/laya-ts/scripts/export_onnx.py \
             --repo convaiinnovations/laya \
             --out-dir .cache/laya-model
@@ -107,16 +120,17 @@ jobs:
         if: env.MODE == 'catalog'
         run: npm run catalog:sync
       - name: Classify and write JSON report
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p reports
-          node scripts/classify-skills.mjs \
-            --mode "$MODE" \
-            --catalog catalog.json \
-            --model ./.cache/laya-model \
-            --laya ./.laya-src/laya-ts/dist/index.js \
-            --threshold "$THRESHOLD" \
-            --limit "$LIMIT" \
-            --output reports/laya-classifications.json
+          args=(--mode "$MODE" --catalog catalog.json --model ./.cache/laya-model \
+            --laya ./.laya-src/laya-ts/dist/index.js --threshold "$THRESHOLD" \
+            --limit "$LIMIT" --output reports/laya-classifications.json)
+          if [[ "$IS_MANUAL" == true && "$ON_DEFAULT_BRANCH" == true && "$MODE" == catalog && "$PROPOSE_UPDATES" == true ]]; then
+            args+=(--write)
+          fi
+          node scripts/classify-skills.mjs "${args[@]}"
       - name: Upload classification report
         uses: actions/upload-artifact@v4
         with:
@@ -124,3 +138,23 @@ jobs:
           path: reports/laya-classifications.json
           if-no-files-found: error
           retention-days: 30
+      - name: Validate proposed catalog before opening a PR
+        if: github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.mode == 'catalog' && inputs.propose_updates == true
+        run: |
+          npm run catalog:check
+          npm test
+      - name: Open review PR with suggested mappings
+        if: github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.mode == 'catalog' && inputs.propose_updates == true
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          add-paths: catalog.json
+          branch: automation/laya-catalog-tags
+          delete-branch: true
+          commit-message: 'chore(skills): propose Laya technology tags'
+          title: 'chore(skills): review Laya-classified technology tags'
+          body: |
+            This PR proposes AutoSkills technology IDs using Laya classification.
+            Only known SKILLS_MAP IDs are added, without deleting existing mappings.
+            Download the classification JSON from the triggering workflow run.
+            Confidence is not calibrated on this catalog: manually verify before merging.
