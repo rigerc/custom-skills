@@ -122,47 +122,30 @@ Review all changes to `SKILL.md`, scripts, and reference files before merging. S
 
 This starter intentionally does **not** use `skills-registry/index.json`: that file belongs to AutoSkills' former bundled review index, not its user-registry catalog format.
 
-## Advisory Laya classification (GitHub Actions)
+## Laya classification and model cache
 
-The [Classify skills with Laya](.github/workflows/classify-skills.yml) workflow uses
-[the TypeScript Laya runtime](https://github.com/NandhaKishorM/laya/tree/main/laya-ts)
-to produce **review-only** classification reports. It does not write to
-`catalog.json`, commit changes, or create automatic recommendation mappings.
+[Classify skills with Laya](.github/workflows/classify-skills.yml)
+provides advisory classification of custom catalog entries and the built-in
+AutoSkills map. Pull requests run model-free fixture tests. On relevant pushes
+to `main`, a weekly schedule, or manual dispatch, the workflow builds the
+pinned Laya TypeScript runtime, restores the split-ONNX model cache (or
+exports it on a miss), and uploads a 30-day JSON report. Each completed run
+also includes counts of classifications, review flags, and suggested tags
+in the GitHub Actions summary.
 
-- **Pull requests** that touch classifier-related files run fast fixture tests without loading a model.
-- **Pushes to `main`** touching skills, catalog, or the workflow run classification in `catalog` mode.
-- **Actions → Classify skills with Laya → Run workflow** allows choosing
-  `catalog` (suggest existing technology IDs) or `map` (group the built-in AutoSkills
-  skills into domains), and selecting a limit and confidence threshold.
-- Download `laya-catalog-classifications` or `laya-map-classifications` from
-  the completed run's **Artifacts** section. `proposedAdditions` are
-  suggestions for manual review, not automatically approved mappings.
+[Warm Laya model cache](.github/workflows/warm-laya-cache.yml)
+runs on Sunday and Thursday, and can be started manually. Both workflows
+share the same [model preparation action](.github/actions/laya-model/action.yml):
+it validates the cached bundle and installs CPU-only PyTorch 2.6.0 when
+export is necessary. Model creation is still resource-intensive the first
+time and the upstream Hugging Face snapshot is not revision-pinned.
 
-The workflow pins the Laya source checkout to commit
-`4ac226d5ee88ed6df8db288a05c766d7a34ee682`, builds `laya-ts`, and
-exports the public `convaiinnovations/laya` checkpoint to split ONNX on the
-first inference run (subsequent runs can restore the ONNX model from the Actions
-cache). The model is large; initial exports may take substantial runner time,
-disk space and network bandwidth. The GitHub-hosted runner performs real
-inference only for trusted default-branch pushes or manual runs, never for
-untrusted pull requests. The checkpoint download is not currently pinned to a
-Hugging Face revision; for bit-for-bit reproducibility, pin the model snapshot
-and update the cache key.
+**Proposing tags is opt-in:** manually dispatch the classifier on the
+default branch with `mode: catalog` and `propose_updates: true`. A separate
+job validates and opens a review PR for high-scoring additions to
+`catalog.json`; it never merges automatically. Normal classification has
+read-only repository permissions. Repository settings must allow Actions
+to create pull requests for this option.
 
-Run the classifier locally (requires the TypeScript parser, a built Laya runtime
-and an exported ONNX model; see [Laya's export guide](https://github.com/NandhaKishorM/laya/blob/main/laya-ts/README.md)):
-
-```bash
-npm install --no-save typescript
-node scripts/classify-skills.mjs --inspect-map
-node scripts/classify-skills.mjs --mode catalog --model ./model \
-  --laya ../laya/laya-ts/dist/index.js --output ./skill-classifications.json
-node scripts/classify-skills.mjs --mode map --model ./model \
-  --laya ../laya/laya-ts/dist/index.js --output ./autoskills-classified.json
-node --test tests/classify-skills.test.mjs
-```
-
-The `--write` CLI flag can add only sufficiently high-confidence suggestions
-while preserving existing technology IDs, but the GitHub Action deliberately
-does **not** enable it. Review classifications against actual skill behavior;
-Laya's output confidence is not independently calibrated on this registry.
+For complete usage, cache and trust details, see
+[docs/laya-classification.md](docs/laya-classification.md).
