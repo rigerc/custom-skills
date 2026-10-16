@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "id": "react-code-review",
+      "description": "Review React and Next.js code changes for correctness, maintainability, accessibility, and rendering performance.",
+      "path": "skills/react-code-review",
+      "technologies": [
+        "react",
+        "nextjs"
+      ]
+    },
+    {
+      "id": "release-checklist",
+      "description": "Build a risk-aware release plan with verifiable checks, ownership, rollout and rollback criteria.",
+      "path": "skills/release-checklist",
+      "always": true
+    },
+    {
+      "id": "incident-runbook",
+      "description": "Structure incident response, diagnosis, communication, mitigation and after-action review.",
+      "path": "skills/incident-runbook"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "registries": {
+    "team": {
+      "repository": "rigerc/custom-skills",
+      "manifest": "catalog.json"
+    }
+  }
+}
