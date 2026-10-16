@@ -2,34 +2,20 @@
   "version": 1,
   "skills": [
     {
-      "id": "react-code-review",
-      "description": "Review React and Next.js code changes for correctness, maintainability, accessibility, and rendering performance.",
-      "path": "skills/react-code-review",
-      "technologies": [
-        "react",
-        "nextjs"
-      ]
-    },
-    {
-      "id": "release-checklist",
-      "description": "Build a risk-aware release plan with verifiable checks, ownership, rollout and rollback criteria.",
-      "path": "skills/release-checklist",
-      "always": true
-    },
-    {
-      "id": "incident-runbook",
-      "description": "Structure incident response, diagnosis, communication, mitigation and after-action review.",
-      "path": "skills/incident-runbook"
-    },
-    {
       "id": "gum-cli",
       "description": "Use Charmbracelet Gum to build polished interactive shell scripts with prompts, selectors, filters, spinners, formatting, tables, pagers, logging, and styled terminal output. Use when writing, reviewing, or debugging shell workflows that invoke the `gum` CLI.",
-      "path": "skills/gum-cli"
+      "path": "skills/gum-cli",
+      "technologies": [
+        "bash"
+      ]
     },
     {
       "id": "ink",
       "description": "Build, debug, and test terminal UIs and interactive CLIs with Ink (vadimdemedes/ink), \"React for CLIs\". Use this skill whenever the user mentions Ink, `ink` imports (`import {render, Box, Text} from 'ink'`), create-ink-app, ink-testing-library, or ink-* packages (ink-text-input, ink-spinner, ink-select-input), or wants to build a CLI/TUI/terminal dashboard/interactive prompt/spinner/progress UI/full-screen terminal app using React components, hooks, or Flexbox layout in the terminal, even if they never say \"Ink\" explicitly. Also use it for fixing Ink problems such as flickering output, app exiting immediately, useInput raw-mode errors, console.log mixing with the UI, text wrapping or layout issues, or testing Ink components.",
-      "path": "skills/ink"
+      "path": "skills/ink",
+      "technologies": [
+        "ink"
+      ]
     },
     {
       "id": "serena-usage",

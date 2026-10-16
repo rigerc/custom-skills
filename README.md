@@ -8,11 +8,6 @@ A standalone GitHub-hosted skills registry for the [`rigerc/autoskills`](https:/
 .
 ├── catalog.json
 ├── skills/
-│   ├── react-code-review/SKILL.md
-│   ├── release-checklist/
-│   │   ├── SKILL.md
-│   │   └── references/checklist.md
-│   ├── incident-runbook/SKILL.md
 │   ├── gum-cli/
 │   │   ├── SKILL.md
 │   │   ├── README.md
@@ -59,14 +54,13 @@ A standalone GitHub-hosted skills registry for the [`rigerc/autoskills`](https:/
 
 | Skill | Catalog rule | Behavior |
 | --- | --- | --- |
-| `react-code-review` | `"technologies": ["react", "nextjs"]` | Recommended when React **or** Next.js is detected. |
-| `release-checklist` | `"always": true` | Recommended on every project. |
-| `incident-runbook` | No mapping | Available for explicit selection; not installed by `-y` unless otherwise recommended. |
-| `gum-cli` | No mapping | Available for explicit selection; not installed by `-y` unless otherwise recommended. |
-| `ink` | No mapping | Available for explicit selection; not installed by `-y` unless otherwise recommended. |
+| `gum-cli` | `"technologies": ["bash"]` | Recommended when the project contains `.sh` or `.bash` files. |
+| `ink` | `"technologies": ["ink"]` | Recommended when the project depends on `ink`, an `ink-*` package, or `@inkjs/*`. |
 | `serena-usage` | No mapping | Available for explicit selection; not installed by `-y` unless otherwise recommended. |
 
-Built-in AutoSkills recommendations remain enabled alongside this registry. The technology IDs must exist in the AutoSkills `SKILLS_MAP` used by the installed CLI. The example IDs `react` and `nextjs` are supported in the referenced fork. A catalog cannot define new detection rules.
+Recommendation metadata lives only in `catalog.json` and is maintained by hand; it is never derived from `SKILL.md`. The sync action preserves `technologies` and `always` and only rewrites `description` and `path`.
+
+Built-in AutoSkills recommendations remain enabled alongside this registry. The technology IDs must exist in the AutoSkills `SKILLS_MAP` used by the installed CLI. The `ink` and `bash` IDs used here are supported in the referenced fork. A catalog cannot define new detection rules, so a skill whose runtime has no matching ID (for example `serena-usage`, which drives the Serena MCP server) cannot be recommended by detection and stays manual-select.
 
 ## Automatic catalog updates (GitHub Actions)
 
@@ -97,8 +91,8 @@ Example `SKILL.md` metadata:
 
 ```yaml
 ---
-name: release-checklist
-description: Build a risk-aware release checklist.
+name: my-skill
+description: One-line summary of when an agent should load this skill.
 ---
 ```
 
