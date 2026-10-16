@@ -51,7 +51,7 @@ runs:
         set -euo pipefail
         # CPU-only Torch avoids the much larger default CUDA dependency set.
         python -m pip install --disable-pip-version-check \
-          --index-url https://download.pytorch.org/whl/cpu 'torch==2.6.0'
+          --index-url https://download.pytorch.org/whl/cpu 'torch==2.9.0'
         python -m pip install --disable-pip-version-check \
           -e './.laya-src[onnx]' 'transformers>=4.48,<5'
         python .laya-src/laya-ts/scripts/export_onnx.py \
