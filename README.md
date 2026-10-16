@@ -136,7 +136,7 @@ in the GitHub Actions summary.
 [Warm Laya model cache](.github/workflows/warm-laya-cache.yml)
 runs on Sunday and Thursday, and can be started manually. Both workflows
 share the same [model preparation action](.github/actions/laya-model/action.yml):
-it validates the cached bundle and installs CPU-only PyTorch 2.6.0 when
+it validates the cached bundle and installs CPU-only PyTorch 2.9.0 when
 export is necessary. Model creation is still resource-intensive the first
 time and the upstream Hugging Face snapshot is not revision-pinned.
 
