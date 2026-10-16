@@ -6,12 +6,15 @@ on:
       - 'catalog.json'
       - 'scripts/classify-skills.mjs'
       - 'tests/classify-skills.test.mjs'
+      - '.github/actions/laya-model/**'
+      - '.github/workflows/warm-laya-cache.yml'
       - '.github/workflows/classify-skills.yml'
   push:
     branches: [main]
     paths:
       - 'catalog.json'
       - 'skills/**'
+      - '.github/actions/laya-model/**'
       - 'scripts/classify-skills.mjs'
       - '.github/workflows/classify-skills.yml'
   workflow_dispatch:
@@ -47,7 +50,7 @@ permissions:
 
 concurrency:
   group: laya-classification-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   verify:
@@ -72,8 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     env:
       MODE: ${{ inputs.mode || 'catalog' }}
       LIMIT: ${{ inputs.limit || '100' }}
@@ -95,27 +97,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
       - name: Build Laya TypeScript runtime
         run: |
           npm install --no-save --ignore-scripts typescript@5.9.3
-          npm install --prefix .laya-src/laya-ts
+          npm ci --prefix .laya-src/laya-ts
           npm run build --prefix .laya-src/laya-ts
-      - name: Restore exported ONNX model
-        id: model-cache
-        uses: actions/cache@v4
-        with:
-          path: .cache/laya-model
-          key: laya-onnx-4ac226d5ee88-english-v1
-      - name: Export split ONNX weights (cache miss only)
-        if: steps.model-cache.outputs.cache-hit != 'true'
-        run: |
-          python -m pip install -e './.laya-src[onnx]' onnxscript
-          python .laya-src/laya-ts/scripts/export_onnx.py \
-            --repo convaiinnovations/laya \
-            --out-dir .cache/laya-model
+      - name: Restore or export split-ONNX checkpoint
+        uses: ./.github/actions/laya-model
       - name: Reconcile local catalog without pushing
         if: env.MODE == 'catalog'
         run: npm run catalog:sync
@@ -131,6 +119,25 @@ jobs:
             args+=(--write)
           fi
           node scripts/classify-skills.mjs "${args[@]}"
+      - name: Summarize classification results
+        shell: bash
+        run: |
+          node -e '
+          const fs = require("node:fs");
+          const data = JSON.parse(fs.readFileSync("reports/laya-classifications.json", "utf8"));
+          const records = data.records || [];
+          const review = records.filter(item => item.needsReview).length;
+          const additions = records.reduce((n, item) => n + (item.proposedAdditions || []).length, 0);
+          const lines = [
+            "### Laya AutoSkills classification",
+            "Mode: " + data.mode,
+            "Skills classified: " + records.length,
+            "Flagged for manual review: " + review,
+            "Technology tag suggestions: " + additions,
+            "Download the JSON report from workflow artifacts."
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          '
       - name: Upload classification report
         uses: actions/upload-artifact@v4
         with:
@@ -138,13 +145,42 @@ jobs:
           path: reports/laya-classifications.json
           if-no-files-found: error
           retention-days: 30
-      - name: Validate proposed catalog before opening a PR
+      - name: Upload proposed catalog for review
         if: github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.mode == 'catalog' && inputs.propose_updates == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: laya-catalog-proposal
+          path: catalog.json
+          if-no-files-found: error
+          retention-days: 7
+
+  propose:
+    name: Open review PR for classified tags
+    needs: classify
+    if: github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.mode == 'catalog' && inputs.propose_updates == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download reviewed catalog proposal
+        uses: actions/download-artifact@v4
+        with:
+          name: laya-catalog-proposal
+          path: .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install TypeScript parser for validation
+        run: npm install --no-save --ignore-scripts typescript@5.9.3
+      - name: Validate proposed catalog and skills
         run: |
           npm run catalog:check
           npm test
       - name: Open review PR with suggested mappings
-        if: github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.mode == 'catalog' && inputs.propose_updates == true
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
