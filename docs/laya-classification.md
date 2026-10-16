@@ -100,7 +100,7 @@ instead of exporting a fresh model.
 
 Both workflows call [the same composite model action](../.github/actions/laya-model/action.yml)
 to restore, validate, export on a miss, and save the ONNX files. On a cache
-miss it uses pinned **CPU-only PyTorch 2.6.0**, avoiding the download of
+miss it uses pinned **CPU-only PyTorch 2.9.0**, avoiding the download of
 unused CUDA dependencies. Incomplete cached bundles cause an explicit
 failure instead of a misleading inference error. To invalidate a corrupt or
 obsolete cache, increment the version in the composite action's cache key.
