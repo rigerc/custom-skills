@@ -85,6 +85,52 @@ also pass `--laya-url https://your-server.example` to use an existing
 Laya server, with optional `LAYA_API_KEY` for bearer authorization.
 Do not expose an unauthenticated inference service publicly.
 
+## Complete SKILL.md and all-technology evaluation
+
+Catalog mode now reads the **complete `SKILL.md`** rather than just the
+catalog ID and description. Local `path` entries are read from
+`path/SKILL.md`, relative to the catalog; `repository` +
+`directory` entries are downloaded from the GitHub Contents API's default
+branch (set `GITHUB_TOKEN` when authentication is needed). If a source is
+missing, malformed, outside the catalog root, or oversized (over 1 MiB),
+classification **fails rather than falling back** to the short description.
+
+The classifier divides the whole Markdown document into overlapping,
+**700-character windows** by default. Every source character is evaluated;
+it does not silently truncate the file in JavaScript. It asks Laya about
+**every technology ID** in the refreshed `SKILLS_MAP`, including
+technologies not mentioned by name or keywords in the skill metadata.
+It uses `/v1/systemone/batch` with bounded groups of eight technology
+questions and four document windows per HTTP call by default. Both
+sizes are configurable:
+
+```bash
+npm run laya:run -- --chunk-chars 600 --tech-batch-size 6 --batch-size 2
+npm run laya:run -- --write --threshold 0.95
+```
+
+For each technology, the report stores the **maximum model YES probability
+across all windows** and the index of the strongest window.
+This aggregates relevant evidence from anywhere in `SKILL.md`, but
+maximum-over-windows scores can overstate relevance for long skills or
+incidental mentions. It is **not a calibrated document-level probability**.
+The domain is selected by summed per-window domain confidence.
+The report includes source path, window count, evaluated technology count
+and the indices of any model-truncated windows.
+
+**Write safety:** If Laya reports any truncated request for a skill,
+the script will not add *any* tags for that skill. Unreadable files or
+invalid/incomplete prediction responses abort classification; the catalog
+is written only after every selected skill is processed successfully.
+`--write` remains opt-in and additive-only.
+
+Evaluating every technology against every source window increases inference
+time substantially, especially for long Markdown documents on the CPU
+checkpoint. For a small trial use `--limit 1` before running the full
+catalog. Content is chunked because the default Laya English model's
+context window is short; model-side truncation is detected but may require
+reducing `--chunk-chars`.
+
 ## Modes and commands
 
 - **Catalog** (default): for each custom catalog entry, suggest technology IDs
@@ -113,11 +159,12 @@ All scripts use the same `--laya-url` option (default
 **server checkpoint name**, default `english`. It is not an ONNX model
 directory. `--output PATH` chooses the JSON report. The `--threshold`
 default is 0.80; the write convenience command sets it to 0.90. For
-`--mode map`, `--batch-size` can be at most 64 to satisfy the HTTP
-API's batch limit. `--inspect-map` needs neither HTTP nor weights.
+`--mode map`, `--batch-size` can be at most 64. In catalog mode,
+`--tech-batch-size` is at most 63, leaving one slot for the domain
+question in Laya's 64-question limit. `--inspect-map` needs neither HTTP nor weights.
 
-The reports retain per-skill domain confidence and proposed technology
-additions. `--write` refuses to add suggestions when the model indicates
+The reports retain per-skill domain confidence, all evaluated technology
+probabilities and proposed technology additions. `--write` refuses to add suggestions when the model indicates
 truncation (including `usage.truncated_questions`) and never overwrites
 existing IDs. **Laya confidence is not calibrated against this catalog**;
 review every proposed mapping against real skills before committing. A

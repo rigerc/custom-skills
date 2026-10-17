@@ -15,6 +15,8 @@ Without --write the catalog is never changed by this workflow.
   --mode catalog|map   Classifier mode (default: catalog)
   --limit N            Classify a sample
   --threshold N        Minimum probability for a suggested tag
+  --tech-batch-size N  Technologies per question group (default 8)
+  --chunk-chars N      Characters per SKILL.md window (default 700)
   --output PATH        Report destination
   --help               Print this help
 
@@ -29,7 +31,7 @@ function argumentsForClassifier(argv) {
     throw new Error('laya:run always downloads the upstream map; use the standalone classifier for --map/--inspect-map');
   }
   const valueOptions = new Set(['--mode', '--catalog', '--model', '--laya-url', '--output',
-    '--threshold', '--min-domain', '--max-candidates', '--batch-size', '--limit']);
+    '--threshold', '--min-domain', '--tech-batch-size', '--chunk-chars', '--batch-size', '--limit']);
   let mode = 'catalog', write = false, threshold = false, output = false;
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
