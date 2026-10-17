@@ -15,6 +15,53 @@ The first prediction downloads the English checkpoint and may take time.
 The health check only verifies the server is reachable, not that the
 checkpoint has been downloaded.
 
+## One-command workflow
+
+From this repository's root, after `npm install`:
+
+```bash
+npm run laya:run                          # Fresh map + report, no catalog writes
+npm run laya:run -- --write              # Sync catalog + add high-confidence tags
+npm run laya:run -- --limit 5            # Sample, still read-only
+npm run laya:run -- --mode map --limit 10 # Classify built-in AutoSkills skills
+```
+
+The command performs the complete workflow in this order:
+
+1. Fetch the latest `skills-map.ts` from **`rigerc/autoskills/main`** and validate
+   its TypeScript structure. Cache this snapshot in
+   `.cache/autoskills/skills-map.ts` (gitignored), printing its SHA-256.
+   It **fails closed** if downloading or parsing fails; it never silently
+   uses a stale cached map.
+2. Parse the **exact saved snapshot** using the existing classifier's AST
+   inspection. No Laya server is needed for this step.
+3. For read-only runs, check for existing catalog drift without modifying
+   `catalog.json`. With `--write`, first run `catalog:sync` to discover
+   or reconcile catalog entries before classification.
+4. Build/start the pinned Laya service with Docker Compose and wait for
+   its HTTP health check; classify with the saved map.
+5. Run `catalog:check` and `npm test`, then stop the Compose service
+   **even if classification or validation fails**. The checkpoint volume
+   is retained for reuse.
+
+The default report is `skill-classifications.json` (or
+`autoskills-classified.json` for `--mode map`). Pass `--output`,
+`--limit`, `--threshold`, `--model` and other classifier options after
+`--` as needed. `--write` works only in catalog mode, uses
+`--threshold 0.90` by default unless overridden, and adds only accepted
+technology IDs; it never removes existing mappings. Review the diff before
+committing catalog updates.
+
+The full command always refreshes the upstream map. For a custom or pinned
+`--map` source, use `scripts/classify-skills.mjs` directly instead.
+You can also run just `npm run laya:refresh-map`; a direct
+`npm run laya:classify` still downloads the live default source rather
+than reading the workflow's saved snapshot.
+
+**Scope:** This refresh updates only the *classifier's input snapshot* of
+AutoSkills' technology map. It does **not** write to the
+`rigerc/autoskills` repository or change the AutoSkills CLI installation.
+
 ## Start and stop Laya
 
 From the root of this repository:

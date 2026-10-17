@@ -128,25 +128,27 @@ This starter intentionally does **not** use `skills-registry/index.json`: that f
 
 ## Local Laya classification with Docker
 
-Laya classification is now **local and opt-in**, with the upstream
-[Laya Docker HTTP server](https://github.com/NandhaKishorM/laya)
-instead of ONNX export in GitHub Actions. Docker Compose builds a pinned
-upstream commit and caches its checkpoint in a named volume.
+Laya classification is local and opt-in, using the upstream
+[Laya Docker HTTP server](https://github.com/NandhaKishorM/laya).
+The **full workflow** fetches the latest `rigerc/autoskills/main`
+`skills-map.ts`, snapshots it locally, starts Dockerized Laya, runs
+classification and validation, and stops Docker automatically.
 
 ```bash
 npm install
-npm run laya:up
-npm run laya:classify -- --limit 5      # advisory JSON report only
-npm run laya:classify:map               # built-in skills by domain
-npm run laya:classify:write -- --limit 5 # optional catalog tag additions
-npm run laya:down
+npm run laya:run                     # Advisory report only
+npm run laya:run -- --write         # Sync and update catalog.json with accepted tags
+npm run laya:run -- --limit 5       # First five custom skills
+npm run laya:run -- --mode map      # Built-in AutoSkills domain report
 ```
 
-The first classification downloads a model and requires substantial
-memory and disk space. Reports are ignored by Git. Suggestions are not
-calibrated on this catalog; review changes to `catalog.json` before
-committing. The remaining catalog sync and validation workflows are not
-Laya-specific.
+The map snapshot is stored under the gitignored `.cache/` directory
+and verified before Docker starts. `--write` is opt-in, defaults to
+the stricter 0.90 confidence threshold, and does not remove existing
+tags. The full command also runs catalog checks and tests. Model
+downloads occur on first inference and require substantial RAM/disk.
+Manual commands `laya:up`, `laya:classify`, and `laya:down` are
+still available separately.
 
-See [docs/laya-classification.md](docs/laya-classification.md) for
-requirements, options, and security notes.
+See [docs/laya-classification.md](docs/laya-classification.md)
+for workflow steps, supported flags, provenance and limitations.
