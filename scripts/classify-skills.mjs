@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
  * Classify AutoSkills built-in skills into broad domains, or suggest supported
- * AutoSkills technology IDs for custom-skills/catalog.json using the Dockerized Laya HTTP API.
+ * AutoSkills technology IDs for custom-skills/catalog.json using Laya or OpenCode Jev.
  *
- * Requires Node >= 22, `typescript`, and a running Laya Docker HTTP service.
+ * Requires Node >= 22 and `typescript`; Laya mode also requires Docker.
  * The AutoSkills TypeScript source is PARSED, never executed.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { readSkillMarkdown } from './skill-source.mjs';
+import { createOpenCodeClient, DEFAULT_OPENCODE_JEV_URL, validateOpenCodeUrl } from './opencode-jev-client.mjs';
 import { cachedSkillProfile, technologyQuestion, selectedEvidence, isBorderline } from './skill-profile.mjs';
 import { createRequire } from 'node:module';
 
@@ -42,8 +43,11 @@ Options:
                        map: classify all built-in SKILLS_MAP skills by domain
   --map PATH_OR_URL    Fork skills-map.ts; defaults to rigerc/autoskills main
   --catalog PATH       Custom-registry catalog.json (default ./catalog.json)
-  --model NAME         Laya server checkpoint (default english)
-  --laya-url URL       Dockerized Laya server (default http://127.0.0.1:8000)
+  --provider NAME      laya (default) or opencode-zen (Jev System One)
+  --model NAME         Defaults to english (Laya), jev-1.13-free (OpenCode)
+  --laya-url URL       Dockerized Laya origin (default http://127.0.0.1:8000)
+  --opencode-url URL   Jev endpoint (default ${DEFAULT_OPENCODE_JEV_URL})
+                       Requires OPENCODE_API_KEY or OPENCODE_ZEN_API_KEY
   --output PATH        Report JSON (default ./skill-classifications.json)
   --threshold N        Minimum P(true) to suggest a technology (default 0.80)
   --min-domain N       Below this domain confidence, mark needsReview (default 0.55)
@@ -64,14 +68,16 @@ The default run NEVER modifies catalog.json; --write only ADDS suggested IDs.
 function parseArgs(argv) {
   const args = {
     mode: 'catalog', map: DEFAULT_MAP, catalog: './catalog.json',
-    model: 'english', layaUrl: process.env.LAYA_URL || 'http://127.0.0.1:8000',
+    provider: 'laya', model: null, layaUrl: process.env.LAYA_URL || 'http://127.0.0.1:8000',
+    opencodeUrl: DEFAULT_OPENCODE_JEV_URL,
     output: './skill-classifications.json',
     threshold: 0.80, minDomain: 0.55, techBatchSize: 8, chunkChars: 600, fallbackLimit: 12, fallback: true,
     batchSize: 4, limit: Number.MAX_SAFE_INTEGER, write: false, inspectMap: false,
   };
   const valueOptions = new Map([
     ['--mode', 'mode'], ['--map', 'map'], ['--catalog', 'catalog'],
-    ['--model', 'model'], ['--laya-url', 'layaUrl'], ['--output', 'output'],
+    ['--provider', 'provider'], ['--model', 'model'], ['--laya-url', 'layaUrl'],
+    ['--opencode-url', 'opencodeUrl'], ['--output', 'output'],
     ['--threshold', 'threshold'], ['--min-domain', 'minDomain'],
     ['--tech-batch-size', 'techBatchSize'], ['--chunk-chars', 'chunkChars'], ['--fallback-limit', 'fallbackLimit'], ['--batch-size', 'batchSize'],
     ['--limit', 'limit'],
@@ -95,6 +101,15 @@ function parseArgs(argv) {
     if (!Number.isInteger(args[k])) throw new Error(`${k} must be an integer`);
   }
   if (!['catalog', 'map'].includes(args.mode)) throw new Error('mode must be catalog or map');
+  if (!['laya', 'opencode-zen'].includes(args.provider)) throw new Error('provider must be laya or opencode-zen');
+  if (args.provider === 'laya' && argv.includes('--opencode-url')) {
+    throw new Error('--opencode-url requires --provider opencode-zen');
+  }
+  if (args.provider === 'opencode-zen' && argv.includes('--laya-url')) {
+    throw new Error('--laya-url requires --provider laya');
+  }
+  args.model ||= args.provider === 'opencode-zen' ? 'jev-1.13-free' : 'english';
+  if (args.provider === 'opencode-zen') validateOpenCodeUrl(args.opencodeUrl);
   if (args.write && args.mode !== 'catalog') throw new Error('--write requires --mode catalog');
   if (args.batchSize > 64) throw new Error('batchSize must be <= 64 (Laya HTTP batch limit)');
   if (args.techBatchSize > 63) throw new Error('techBatchSize must be <= 63 (Laya question limit)');
@@ -379,12 +394,14 @@ async function main() {
       technologyIds: map.technologies.map(t => t.id) }, null, 2));
     return;
   }
-  const agent = createLayaClient(args);
+  const agent = args.provider === 'opencode-zen' ? createOpenCodeClient(args) : createLayaClient(args);
   const results = args.mode === 'catalog'
     ? await classifyCatalog(args, map, agent)
     : await classifyMap(args, map, agent);
   const report = { generatedAt: new Date().toISOString(), map: args.map,
-    model: args.model, layaUrl: args.layaUrl, threshold: args.threshold, ...results };
+    provider: args.provider, model: args.model,
+    endpoint: args.provider === 'opencode-zen' ? args.opencodeUrl : args.layaUrl,
+    threshold: args.threshold, ...results };
   await writeFile(resolve(args.output), `${JSON.stringify(report, null, 2)}\n`);
   console.error(`Wrote ${args.output} (${results.records.length} records).`);
   if (args.write) console.error(results.changedCatalog ? 'Updated catalog.json.' : 'No catalog changes.');

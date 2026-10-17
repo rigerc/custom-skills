@@ -62,6 +62,50 @@ than reading the workflow's saved snapshot.
 AutoSkills' technology map. It does **not** write to the
 `rigerc/autoskills` repository or change the AutoSkills CLI installation.
 
+## OpenCode Zen Jev 1.13 Free (no Docker)
+
+OpenCode officially serves **`jev-1.13-free`** via its **Zen System One API**:
+`https://opencode.ai/zen/v1/systemone`. This model is **not documented
+as part of OpenCode Go's model catalog**; the Go API endpoints are
+different. Use a **Zen API key** (not just an OpenCode Go subscription).
+The free model's availability/limits may change; review
+[OpenCode Zen documentation](https://docs.opencode.ai/docs/zen/).
+
+```bash
+export OPENCODE_API_KEY='your-zen-api-key'
+npm run laya:run:jev                      # Refresh map, classify, validate; no Docker
+npm run laya:run:jev -- --limit 1         # Test one skill
+npm run laya:run:jev -- --write           # Add eligible catalog tags
+# Equivalent, without the npm shortcut:
+npm run laya:run -- --provider opencode-zen --model jev-1.13-free
+```
+
+Alternatively use `OPENCODE_ZEN_API_KEY`. Do not put API keys in CLI
+arguments, commit them to Git, or paste them into report files.
+
+OpenCode Zen uses the same typed **System One** requests as Laya
+(`state` + `questions`) but publishes a **single-state** endpoint,
+not Laya's `/v1/systemone/batch`. The client calls the endpoint
+sequentially, once per compact-profile question group or selected fallback
+excerpt, including in map mode. Requests include
+`Authorization: Bearer` and the model id `jev-1.13-free`.
+A 401/403 or 429 causes a clear error and stops processing; there is no
+automatic fallback to another paid model or to local Docker.
+
+The classifier keeps exactly the same safeguards for `--write`
+(threshold, review flags and exclusion of truncated responses).
+**Jev and Laya scores are not necessarily calibrated identically**:
+start read-only with a small `--limit`, review the scores, and choose a
+threshold appropriate for Jev rather than assuming a Laya cutoff is valid.
+
+`--opencode-url` is available for testing with a local System One
+mock or the published OpenCode endpoint. Credential-bearing requests
+are restricted to those destinations. The direct classifier command
+also accepts `--provider opencode-zen`, making it possible to use a
+previously saved `--map` snapshot without refreshing it.
+The default `npm run laya:run` remains Docker-based, and only the
+OpenCode provider skips Docker.
+
 ## Start and stop Laya
 
 From the root of this repository:
