@@ -12,7 +12,7 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: .cache/laya-model
-        key: laya-onnx-4ac226d5ee88-english-v2
+        key: laya-onnx-4ac226d5ee88-english-v3
 
     - name: Check required model files
       id: model-files
@@ -54,6 +54,11 @@ runs:
           --index-url https://download.pytorch.org/whl/cpu 'torch==2.9.0'
         python -m pip install --disable-pip-version-check \
           -e './.laya-src[onnx]' 'transformers>=4.48,<5'
+        # Work around upstream 0.4.8 shape guards incompatible with the
+        # PyTorch 2.9 exporter. This patch is guarded by exact source checks.
+        # The exporter still verifies the produced graphs at batch size 1.
+        python scripts/patch-laya-onnx-export.py \
+          .laya-src/laya-ts/scripts/export_onnx.py
         python .laya-src/laya-ts/scripts/export_onnx.py \
           --repo convaiinnovations/laya \
           --out-dir .cache/laya-model
@@ -79,4 +84,4 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: .cache/laya-model
-        key: laya-onnx-4ac226d5ee88-english-v2
+        key: laya-onnx-4ac226d5ee88-english-v3
