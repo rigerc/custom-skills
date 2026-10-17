@@ -1,0 +1,27 @@
+# Run Laya's native HTTP inference server using its pinned upstream Dockerfile.
+# The first inference downloads the English checkpoint into the named cache volume.
+services:
+  laya:
+    build:
+      context: "https://github.com/NandhaKishorM/laya.git#4ac226d5ee88ed6df8db288a05c766d7a34ee682"
+    image: custom-skills-laya:4ac226d5
+    command: ["laya-serve"]
+    environment:
+      LAYA_DEVICE: cpu
+      LAYA_PRELOAD: "0"
+      LAYA_DEFAULT_MODEL: english
+      LAYA_THREADS: "${LAYA_THREADS:-4}"
+    ports:
+      - "127.0.0.1:${LAYA_PORT:-8000}:8000"
+    volumes:
+      - laya-model-cache:/home/laya/.cache/huggingface
+    init: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 10m
+
+volumes:
+  laya-model-cache:

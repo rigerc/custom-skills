@@ -8,9 +8,18 @@
     "catalog:sync": "node scripts/sync-catalog.mjs",
     "catalog:check": "node scripts/sync-catalog.mjs --check",
     "test": "node --test tests/*.test.mjs && node scripts/validate-catalog.mjs",
-    "validate": "node scripts/validate-catalog.mjs"
+    "validate": "node scripts/validate-catalog.mjs",
+    "laya:up": "docker compose -f compose.laya.yml up -d --build --wait",
+    "laya:down": "docker compose -f compose.laya.yml down",
+    "laya:inspect-map": "node scripts/classify-skills.mjs --inspect-map",
+    "laya:classify": "node scripts/classify-skills.mjs --mode catalog --output skill-classifications.json",
+    "laya:classify:map": "node scripts/classify-skills.mjs --mode map --output autoskills-classified.json",
+    "laya:classify:write": "node scripts/classify-skills.mjs --mode catalog --threshold 0.9 --output skill-classifications.json --write"
   },
   "engines": {
     "node": ">=22.6.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
   }
 }

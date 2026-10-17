@@ -126,30 +126,27 @@ Review all changes to `SKILL.md`, scripts, and reference files before merging. S
 
 This starter intentionally does **not** use `skills-registry/index.json`: that file belongs to AutoSkills' former bundled review index, not its user-registry catalog format.
 
-## Laya classification and model cache
+## Local Laya classification with Docker
 
-[Classify skills with Laya](.github/workflows/classify-skills.yml)
-provides advisory classification of custom catalog entries and the built-in
-AutoSkills map. Pull requests run model-free fixture tests. On relevant pushes
-to `main`, a weekly schedule, or manual dispatch, the workflow builds the
-pinned Laya TypeScript runtime, restores the split-ONNX model cache (or
-exports it on a miss), and uploads a 30-day JSON report. Each completed run
-also includes counts of classifications, review flags, and suggested tags
-in the GitHub Actions summary.
+Laya classification is now **local and opt-in**, with the upstream
+[Laya Docker HTTP server](https://github.com/NandhaKishorM/laya)
+instead of ONNX export in GitHub Actions. Docker Compose builds a pinned
+upstream commit and caches its checkpoint in a named volume.
 
-[Warm Laya model cache](.github/workflows/warm-laya-cache.yml)
-runs on Sunday and Thursday, and can be started manually. Both workflows
-share the same [model preparation action](.github/actions/laya-model/action.yml):
-it validates the cached bundle and installs CPU-only PyTorch 2.9.0 when
-export is necessary. Model creation is still resource-intensive the first
-time and the upstream Hugging Face snapshot is not revision-pinned.
+```bash
+npm install
+npm run laya:up
+npm run laya:classify -- --limit 5      # advisory JSON report only
+npm run laya:classify:map               # built-in skills by domain
+npm run laya:classify:write -- --limit 5 # optional catalog tag additions
+npm run laya:down
+```
 
-**Proposing tags is opt-in:** manually dispatch the classifier on the
-default branch with `mode: catalog` and `propose_updates: true`. A separate
-job validates and opens a review PR for high-scoring additions to
-`catalog.json`; it never merges automatically. Normal classification has
-read-only repository permissions. Repository settings must allow Actions
-to create pull requests for this option.
+The first classification downloads a model and requires substantial
+memory and disk space. Reports are ignored by Git. Suggestions are not
+calibrated on this catalog; review changes to `catalog.json` before
+committing. The remaining catalog sync and validation workflows are not
+Laya-specific.
 
-For complete usage, cache and trust details, see
-[docs/laya-classification.md](docs/laya-classification.md).
+See [docs/laya-classification.md](docs/laya-classification.md) for
+requirements, options, and security notes.
