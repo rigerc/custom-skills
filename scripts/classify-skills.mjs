@@ -8,6 +8,7 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { readSkillMarkdown, skillChunks } from './skill-source.mjs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -45,7 +46,8 @@ Options:
   --output PATH        Report JSON (default ./skill-classifications.json)
   --threshold N        Minimum P(true) to suggest a technology (default 0.80)
   --min-domain N       Below this domain confidence, mark needsReview (default 0.55)
-  --max-candidates N   Candidate technology limit per custom skill (default 12)
+  --tech-batch-size N  Technology questions per HTTP call (default 8; max 63)
+  --chunk-chars N      Window size for complete SKILL.md (default 700)
   --batch-size N       Batch size when scanning built-in map (default 4)
   --limit N            Classify only the first N records (for sampling)
   --write              Add approved suggestions to catalog.json (catalog mode only)
@@ -61,14 +63,14 @@ function parseArgs(argv) {
     mode: 'catalog', map: DEFAULT_MAP, catalog: './catalog.json',
     model: 'english', layaUrl: process.env.LAYA_URL || 'http://127.0.0.1:8000',
     output: './skill-classifications.json',
-    threshold: 0.80, minDomain: 0.55, maxCandidates: 12,
+    threshold: 0.80, minDomain: 0.55, techBatchSize: 8, chunkChars: 700,
     batchSize: 4, limit: Number.MAX_SAFE_INTEGER, write: false, inspectMap: false,
   };
   const valueOptions = new Map([
     ['--mode', 'mode'], ['--map', 'map'], ['--catalog', 'catalog'],
     ['--model', 'model'], ['--laya-url', 'layaUrl'], ['--output', 'output'],
     ['--threshold', 'threshold'], ['--min-domain', 'minDomain'],
-    ['--max-candidates', 'maxCandidates'], ['--batch-size', 'batchSize'],
+    ['--tech-batch-size', 'techBatchSize'], ['--chunk-chars', 'chunkChars'], ['--batch-size', 'batchSize'],
     ['--limit', 'limit'],
   ]);
   for (let i = 0; i < argv.length; i++) {
@@ -80,17 +82,19 @@ function parseArgs(argv) {
     const key = valueOptions.get(arg);
     args[key] = argv[++i];
   }
-  for (const key of ['threshold', 'minDomain', 'maxCandidates', 'batchSize', 'limit']) {
+  for (const key of ['threshold', 'minDomain', 'techBatchSize', 'chunkChars', 'batchSize', 'limit']) {
     args[key] = Number(args[key]);
     if (!Number.isFinite(args[key]) || args[key] <= 0) throw new Error(`${key} must be positive`);
   }
   if (args.threshold > 1 || args.minDomain > 1) throw new Error('Confidence thresholds must be <= 1');
-  for (const k of ['maxCandidates', 'batchSize', 'limit']) {
+  for (const k of ['techBatchSize', 'chunkChars', 'batchSize', 'limit']) {
     if (!Number.isInteger(args[k])) throw new Error(`${k} must be an integer`);
   }
   if (!['catalog', 'map'].includes(args.mode)) throw new Error('mode must be catalog or map');
   if (args.write && args.mode !== 'catalog') throw new Error('--write requires --mode catalog');
   if (args.batchSize > 64) throw new Error('batchSize must be <= 64 (Laya HTTP batch limit)');
+  if (args.techBatchSize > 63) throw new Error('techBatchSize must be <= 63 (Laya question limit)');
+  if (args.chunkChars < 200 || args.chunkChars > 4000) throw new Error('chunkChars must be between 200 and 4000');
   let url;
   try { url = new URL(args.layaUrl); }
   catch { throw new Error('layaUrl must be a valid HTTP(S) URL'); }
@@ -190,37 +194,6 @@ function mapBuiltinSkills(map) {
   return [...bySlug.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function canonical(text) {
-  return String(text || '').toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ').trim().replace(/\s+/g, ' ');
-}
-function includesTerm(haystack, rawTerm) {
-  const term = canonical(rawTerm);
-  if (term.length < 3) return false;
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i').test(haystack);
-}
-
-function technologyCandidates(skill, technologies, maxCandidates) {
-  const content = canonical(`${skill.id} ${skill.description ?? ''}`);
-  const idContent = canonical(skill.id);
-  const existing = new Set(skill.technologies || []);
-  return technologies.map(tech => {
-    let score = 0;
-    if (existing.has(tech.id)) score += 100;
-    if (includesTerm(idContent, tech.id)) score += 30;
-    if (includesTerm(content, tech.id)) score += 10;
-    if (includesTerm(content, tech.name)) score += 10;
-    for (const keyword of tech.keywords) {
-      // Avoid generic project files (package-lock.json), too-short package names, etc.
-      if (keyword.length >= 4 && includesTerm(content, keyword)) score += 2;
-    }
-    return { tech, score };
-  }).filter(x => x.score > 0)
-    .sort((a, b) => b.score - a.score || a.tech.id.localeCompare(b.tech.id))
-    .slice(0, maxCandidates)
-    .map(x => x.tech);
-}
-
 function skillState(skill, techNames = []) {
   return `Agent skill: ${skill.id}\nDescription: ${String(skill.description || '').slice(0, 1600)}\n` +
     (techNames.length ? `Technologies mentioned by AutoSkills: ${techNames.join(', ')}` : '');
@@ -277,43 +250,92 @@ function createLayaClient(args) {
 
 async function classifyCatalog(args, map, agent) {
   const original = JSON.parse(await readFile(resolve(args.catalog), 'utf8'));
-  if (original.version !== 1 || !Array.isArray(original.skills)) throw new Error('Expected version-1 custom-skills catalog.json');
+  if (original.version !== 1 || !Array.isArray(original.skills)) {
+    throw new Error('Expected version-1 custom-skills catalog.json');
+  }
   const records = [];
   let changed = false;
-  for (const s of original.skills.slice(0, args.limit)) {
-    const candidates = technologyCandidates(s, map.technologies, args.maxCandidates);
-    const questions = { domain: DOMAIN_QUESTION };
-    for (let i = 0; i < candidates.length; i++) {
-      const tech = candidates[i];
-      questions[`tech_${i}`] = {
-        type: 'noul',
-        instructions: `Should this agent skill be recommended WHEN ${tech.name} (${tech.id}) is detected in a project? Answer YES only if the skill specifically targets or requires ${tech.name}. Ignore incidental mentions and loose similarities.`,
-      };
-    }
-    const result = await agent.predict(skillState(s), questions);
-    const domain = domainAnswer(result, args.minDomain);
-    const suggestions = candidates.map((tech, i) => {
-      const ans = result.answers?.[`tech_${i}`];
-      if (ans?.type !== 'noul' || typeof ans.noul !== 'number') {
-        throw new Error(`Unexpected Laya yes/no answer for ${s.id}:${tech.id}`);
+  for (const skill of original.skills.slice(0, args.limit)) {
+    // Fail rather than substituting the catalog summary when SKILL.md is inaccessible.
+    const { content, source } = await readSkillMarkdown(skill, args.catalog);
+    const chunks = skillChunks(content, args.chunkChars);
+    const states = chunks.map((chunk, i) =>
+      `Agent skill: ${skill.id}\nCatalog description: ${String(skill.description || '').slice(0, 240)}\n` +
+      `SKILL.md section ${i + 1}/${chunks.length} (characters ${chunk.start}-${chunk.end}):\n${chunk.text}`);
+    const scores = new Map(map.technologies.map(tech =>
+      [tech.id, { id: tech.id, probability: 0, strongestChunk: null }]));
+    const domainTotals = new Map();
+    const truncatedChunks = new Set();
+
+    // Score every mapped technology against every part of the document.
+    // Bound HTTP requests by Laya's 64-question and 64-state limits.
+    for (let offset = 0; offset < map.technologies.length; offset += args.techBatchSize) {
+      const group = map.technologies.slice(offset, offset + args.techBatchSize);
+      const questions = offset === 0 ? { domain: DOMAIN_QUESTION } : {};
+      group.forEach((tech, i) => {
+        questions[`tech_${i}`] = {
+          type: 'noul',
+          instructions: `Should this agent skill be recommended WHEN ${tech.name} (${tech.id}) is detected in a project? Answer YES only if the skill specifically targets or requires ${tech.name}. Ignore incidental mentions and loose similarities.`,
+        };
+      });
+      for (let start = 0; start < states.length; start += args.batchSize) {
+        const results = await agent.predictBatch(states.slice(start, start + args.batchSize), questions);
+        const expected = Math.min(args.batchSize, states.length - start);
+        if (results.length !== expected) {
+          throw new Error(`Unexpected Laya response count for ${skill.id} (expected ${expected}, got ${results.length})`);
+        }
+        for (let row = 0; row < results.length; row++) {
+          const result = results[row];
+          const chunkIndex = start + row;
+          if (isTruncated(result)) truncatedChunks.add(chunkIndex);
+          if (offset === 0) {
+            const domain = domainAnswer(result, args.minDomain);
+            domainTotals.set(domain.domain, (domainTotals.get(domain.domain) || 0) + domain.domainConfidence);
+          }
+          group.forEach((tech, i) => {
+            const answer = result.answers?.[`tech_${i}`];
+            if (answer?.type !== 'noul' || !Number.isFinite(answer.noul) ||
+                answer.noul < 0 || answer.noul > 1) {
+              throw new Error(`Unexpected Laya yes/no answer for ${skill.id}:${tech.id}, chunk ${chunkIndex + 1}`);
+            }
+            const previous = scores.get(tech.id);
+            if (previous.strongestChunk === null || answer.noul > previous.probability) {
+              scores.set(tech.id, { id: tech.id, probability: answer.noul,
+                strongestChunk: chunkIndex + 1 });
+            }
+          });
+        }
       }
-      return { id: tech.id, probability: ans.noul };
-    }).sort((a, b) => b.probability - a.probability);
-    const safeToWrite = !isTruncated(result);
-    const approved = safeToWrite ? suggestions.filter(x => x.probability >= args.threshold).map(x => x.id) : [];
-    const old = Array.isArray(s.technologies) ? [...s.technologies] : [];
+    }
+    const [domainName, domainTotal] = [...domainTotals.entries()]
+      .sort(([nameA, confidenceA], [nameB, confidenceB]) =>
+        confidenceB - confidenceA || nameA.localeCompare(nameB))[0] || [];
+    if (!domainName) throw new Error(`No domain predictions for ${skill.id}`);
+    const domainConfidence = domainTotal / chunks.length;
+    const suggestions = [...scores.values()]
+      .sort((a, b) => b.probability - a.probability || a.id.localeCompare(b.id));
+    // Any truncated window blocks *all* automatic tag additions for this skill.
+    const approved = truncatedChunks.size === 0
+      ? suggestions.filter(item => item.probability >= args.threshold).map(item => item.id)
+      : [];
+    const old = Array.isArray(skill.technologies) ? [...skill.technologies] : [];
     const additions = approved.filter(id => !old.includes(id));
     if (args.write && additions.length) {
-      s.technologies = [...new Set([...old, ...additions])];
+      skill.technologies = [...new Set([...old, ...additions])];
       changed = true;
     }
-    records.push({ id: s.id, ...domain, existingTechnologies: old,
-      suggestions, proposedAdditions: additions,
-      needsReview: domain.needsReview || !safeToWrite || !candidates.length ||
+    records.push({
+      id: skill.id, skillSource: source, sourceChars: content.length,
+      chunkCount: chunks.length, technologyCount: map.technologies.length,
+      domain: domainName, domainConfidence,
+      existingTechnologies: old, suggestions, proposedAdditions: additions,
+      truncatedChunks: [...truncatedChunks].map(i => i + 1).sort((a, b) => a - b),
+      needsReview: domainConfidence < args.minDomain || truncatedChunks.size > 0 ||
         (suggestions.length > 0 && approved.length === 0),
     });
-    console.error(`${s.id}: ${domain.domain}; +[${additions.join(', ') || 'none'}]`);
+    console.error(`${skill.id}: ${domainName}; evaluated ${map.technologies.length} technologies over ${chunks.length} chunks; +[${additions.join(', ') || 'none'}]`);
   }
+  // Write only after every requested skill has been classified successfully.
   if (args.write && changed) {
     await writeFile(resolve(args.catalog), `${JSON.stringify(original, null, 2)}\n`);
   }
