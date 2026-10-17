@@ -67,6 +67,8 @@ jobs:
         run: npm install --no-save --ignore-scripts typescript@5.9.3
       - name: Run classifier fixture tests
         run: node --test tests/classify-skills.test.mjs
+      - name: Test pinned Laya exporter workaround
+        run: python3 -m unittest discover -s tests -p 'test_laya_onnx_patch.py'
 
   classify:
     name: Build ONNX model and classify skills
