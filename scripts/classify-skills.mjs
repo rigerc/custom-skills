@@ -3,12 +3,11 @@
  * Classify AutoSkills built-in skills into broad domains, or suggest supported
  * AutoSkills technology IDs for custom-skills/catalog.json using laya-ts.
  *
- * Requires Node >= 20, `typescript`, and built laya-ts + a split ONNX model.
+ * Requires Node >= 22, `typescript`, and a running Laya Docker HTTP service.
  * The AutoSkills TypeScript source is PARSED, never executed.
  */
 import { readFile, writeFile } from 'node:fs/promises';
-import { resolve, isAbsolute } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -41,8 +40,8 @@ Options:
                        map: classify all built-in SKILLS_MAP skills by domain
   --map PATH_OR_URL    Fork skills-map.ts; defaults to rigerc/autoskills main
   --catalog PATH       Custom-registry catalog.json (default ./catalog.json)
-  --model DIR_OR_REPO  Split ONNX checkpoint (default ./model)
-  --laya MODULE_PATH   Built laya-ts/dist/index.js (else import 'laya-ts')
+  --model NAME         Laya server checkpoint (default english)
+  --laya-url URL       Dockerized Laya server (default http://127.0.0.1:8000)
   --output PATH        Report JSON (default ./skill-classifications.json)
   --threshold N        Minimum P(true) to suggest a technology (default 0.80)
   --min-domain N       Below this domain confidence, mark needsReview (default 0.55)
@@ -60,13 +59,14 @@ The default run NEVER modifies catalog.json; --write only ADDS suggested IDs.
 function parseArgs(argv) {
   const args = {
     mode: 'catalog', map: DEFAULT_MAP, catalog: './catalog.json',
-    model: './model', laya: '', output: './skill-classifications.json',
+    model: 'english', layaUrl: process.env.LAYA_URL || 'http://127.0.0.1:8000',
+    output: './skill-classifications.json',
     threshold: 0.80, minDomain: 0.55, maxCandidates: 12,
     batchSize: 4, limit: Number.MAX_SAFE_INTEGER, write: false, inspectMap: false,
   };
   const valueOptions = new Map([
     ['--mode', 'mode'], ['--map', 'map'], ['--catalog', 'catalog'],
-    ['--model', 'model'], ['--laya', 'laya'], ['--output', 'output'],
+    ['--model', 'model'], ['--laya-url', 'layaUrl'], ['--output', 'output'],
     ['--threshold', 'threshold'], ['--min-domain', 'minDomain'],
     ['--max-candidates', 'maxCandidates'], ['--batch-size', 'batchSize'],
     ['--limit', 'limit'],
@@ -90,6 +90,15 @@ function parseArgs(argv) {
   }
   if (!['catalog', 'map'].includes(args.mode)) throw new Error('mode must be catalog or map');
   if (args.write && args.mode !== 'catalog') throw new Error('--write requires --mode catalog');
+  if (args.batchSize > 64) throw new Error('batchSize must be <= 64 (Laya HTTP batch limit)');
+  let url;
+  try { url = new URL(args.layaUrl); }
+  catch { throw new Error('layaUrl must be a valid HTTP(S) URL'); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+      url.search || url.hash || url.pathname !== '/') {
+    throw new Error('layaUrl must be an HTTP(S) server origin without credentials, path or query');
+  }
+  if (!args.model.trim()) throw new Error('model must be non-empty');
   return args;
 }
 
@@ -105,7 +114,7 @@ async function readSource(pathOrUrl) {
 
 function readTs() {
   try { return require('typescript'); }
-  catch { throw new Error('Missing TypeScript parser. Run: npm install --no-save typescript'); }
+  catch { throw new Error('Missing TypeScript parser. Run: npm install'); }
 }
 
 // Simple AST reading: accepts string literals and arrays, never evaluates TS or regexes.
@@ -216,27 +225,54 @@ function skillState(skill, techNames = []) {
   return `Agent skill: ${skill.id}\nDescription: ${String(skill.description || '').slice(0, 1600)}\n` +
     (techNames.length ? `Technologies mentioned by AutoSkills: ${techNames.join(', ')}` : '');
 }
+function isTruncated(result) {
+  const usage = result?.usage;
+  return Boolean(usage?.truncated ||
+    (Array.isArray(usage?.truncated_questions) && usage.truncated_questions.length > 0) ||
+    (usage?.options && Object.keys(usage.options).length > 0));
+}
 function domainAnswer(result, minDomain) {
   const a = result?.answers?.domain;
-  if (a?.type !== 'choice' || !(a.choice in DOMAINS)) throw new Error('Unexpected Laya domain answer');
-  const confidence = a.answer_confidence ?? a.probabilities?.[a.choice] ?? 0;
-  const truncated = Boolean(result.usage?.truncated || result.usage?.options?.domain);
-  return { domain: a.choice, domainConfidence: confidence, needsReview: confidence < minDomain || truncated };
-}
-
-async function importLaya(modulePath) {
-  if (modulePath) {
-    const loc = /^(?:file:|https?:)/.test(modulePath) ? modulePath : pathToFileURL(resolve(modulePath)).href;
-    return import(loc);
+  if (a?.type !== 'choice' || !Object.hasOwn(DOMAINS, a.choice)) {
+    throw new Error('Unexpected Laya domain answer');
   }
-  try { return await import('laya-ts'); }
-  catch (e) { throw new Error(`Cannot import laya-ts; pass --laya /path/to/laya/laya-ts/dist/index.js. ${e.message}`); }
+  const confidence = a.answer_confidence ?? a.probabilities?.[a.choice] ?? 0;
+  return { domain: a.choice, domainConfidence: confidence,
+    needsReview: confidence < minDomain || isTruncated(result) };
 }
 
-async function loadAgent(args) {
-  const { Agent } = await importLaya(args.laya);
-  if (!Agent?.load) throw new Error('Laya module does not export Agent.load');
-  return Agent.load(args.model.startsWith('.') || isAbsolute(args.model) ? resolve(args.model) : args.model);
+function createLayaClient(args) {
+  const baseUrl = new URL(args.layaUrl);
+  const headers = { 'content-type': 'application/json' };
+  if (process.env.LAYA_API_KEY) headers.authorization = `Bearer ${process.env.LAYA_API_KEY}`;
+
+  async function request(path, payload) {
+    let response;
+    try {
+      response = await fetch(new URL(path, baseUrl), {
+        method: 'POST', headers, body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(600_000),
+      });
+    } catch (error) {
+      throw new Error(`Cannot reach Laya at ${baseUrl.origin}: ${error.message}. Start it with npm run laya:up.`);
+    }
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 500);
+      throw new Error(`Laya HTTP ${response.status}: ${detail}`);
+    }
+    try { return await response.json(); }
+    catch { throw new Error('Laya returned invalid JSON'); }
+  }
+
+  return {
+    predict: (state, questions) =>
+      request('/v1/systemone', { state, questions, model: args.model }),
+    predictBatch: async (states, questions) => {
+      const result = await request('/v1/systemone/batch', { states, questions, model: args.model });
+      if (!Array.isArray(result?.results)) throw new Error('Unexpected Laya batch response');
+      return result.results;
+    },
+  };
 }
 
 async function classifyCatalog(args, map, agent) {
@@ -263,7 +299,7 @@ async function classifyCatalog(args, map, agent) {
       }
       return { id: tech.id, probability: ans.noul };
     }).sort((a, b) => b.probability - a.probability);
-    const safeToWrite = !result.usage?.truncated && !result.usage?.options;
+    const safeToWrite = !isTruncated(result);
     const approved = safeToWrite ? suggestions.filter(x => x.probability >= args.threshold).map(x => x.id) : [];
     const old = Array.isArray(s.technologies) ? [...s.technologies] : [];
     const additions = approved.filter(id => !old.includes(id));
@@ -310,12 +346,12 @@ async function main() {
       technologyIds: map.technologies.map(t => t.id) }, null, 2));
     return;
   }
-  const agent = await loadAgent(args);
+  const agent = createLayaClient(args);
   const results = args.mode === 'catalog'
     ? await classifyCatalog(args, map, agent)
     : await classifyMap(args, map, agent);
   const report = { generatedAt: new Date().toISOString(), map: args.map,
-    model: args.model, threshold: args.threshold, ...results };
+    model: args.model, layaUrl: args.layaUrl, threshold: args.threshold, ...results };
   await writeFile(resolve(args.output), `${JSON.stringify(report, null, 2)}\n`);
   console.error(`Wrote ${args.output} (${results.records.length} records).`);
   if (args.write) console.error(results.changedCatalog ? 'Updated catalog.json.' : 'No catalog changes.');
