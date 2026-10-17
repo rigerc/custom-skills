@@ -105,6 +105,17 @@ unused CUDA dependencies. Incomplete cached bundles cause an explicit
 failure instead of a misleading inference error. To invalidate a corrupt or
 obsolete cache, increment the version in the composite action's cache key.
 
+The pinned upstream exporter in Laya 0.4.8 declares
+`batch_dim` with `min=1`; on PyTorch 2.9 the encoder trace generates a guard
+that excludes batch size one. The model preparation action applies a narrow,
+tested patch in the temporary upstream checkout, setting the export-only
+minimum to **2**. It also sets the markers minimum to **2**, consistent with
+the head's `topk(2)`. The exporter keeps its actual **batch-one verification**
+of the produced ONNX graphs enabled. If the pinned exporter source does not
+match the expected definitions, the patch fails rather than proceeding with
+unreviewed changes. This adjustment has not yet passed a complete real-model
+export; the verification stage will provide the compatibility check.
+
 The first cache miss still requires the large Hugging Face checkpoint and
 ONNX export, which can be slow or exceed a hosted runner's available resources.
 Cache availability, retention, and quotas depend on GitHub; warming is a
