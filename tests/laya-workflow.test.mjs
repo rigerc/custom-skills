@@ -150,3 +150,50 @@ test('refresher replaces cache only with a valid upstream TypeScript map', async
   assert.notEqual(r.status, 0);
   assert.equal(await readFile(out, 'utf8'), validMap);
 });
+
+test('OpenCode provider refreshes map and validates without starting Docker', async t => {
+  const w=await workspace(t);
+  const r=await exec(runner,w.dir,['--provider','opencode-zen','--limit','2'],{
+    ...w.env,OPENCODE_API_KEY:'test'});
+  assert.equal(r.status,0,r.stderr);
+  const steps=(await readFile(w.log,'utf8')).trim().split('\n');
+  assert.equal(steps[0],'refresh');
+  assert.ok(steps[1].startsWith('inspect '));
+  assert.equal(steps[2],'check');
+  assert.ok(steps[3].startsWith('classify '));
+  assert.match(steps[3],/--provider opencode-zen/);
+  assert.deepEqual(steps.slice(4),['check','test']);
+  assert.ok(!steps.some(s=>s.startsWith('docker ')));
+});
+
+test('OpenCode write mode skips Docker and retains write safeguards', async t => {
+  const w=await workspace(t);
+  const r=await exec(runner,w.dir,['--provider','opencode-zen','--write','--limit','1'],{
+    ...w.env,OPENCODE_API_KEY:'test'});
+  assert.equal(r.status,0,r.stderr);
+  const steps=(await readFile(w.log,'utf8')).trim().split('\n');
+  assert.equal(steps[2],'sync');
+  assert.ok(steps.some(s=>s.startsWith('classify ') && s.includes('--threshold 0.90')));
+  assert.ok(!steps.some(s=>s.startsWith('docker ')));
+  assert.equal(await readFile(join(w.dir,'catalog.json'),'utf8'),'updated');
+});
+
+test('OpenCode provider requires a key before map refresh', async t => {
+  const w=await workspace(t);
+  const r=await exec(runner,w.dir,['--provider','opencode-zen'],{
+    ...w.env,OPENCODE_API_KEY:'',OPENCODE_ZEN_API_KEY:''});
+  assert.notEqual(r.status,0);
+  assert.match(r.stderr,/OPENCODE_API_KEY/);
+  await assert.rejects(()=>readFile(w.log,'utf8'),/ENOENT/);
+});
+
+test('OpenCode failed classification does not run Docker or tests', async t => {
+  const w=await workspace(t);
+  const r=await exec(runner,w.dir,['--provider','opencode-zen'],{
+    ...w.env,OPENCODE_API_KEY:'test',FAIL_STEP:'classify'});
+  assert.notEqual(r.status,0);
+  const steps=(await readFile(w.log,'utf8')).trim().split('\n');
+  assert.ok(steps.some(s=>s.startsWith('classify ')));
+  assert.ok(!steps.some(s=>s.startsWith('docker ')));
+  assert.ok(!steps.includes('test'));
+});

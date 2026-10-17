@@ -6,13 +6,16 @@ import { resolve } from 'node:path';
 function usage() {
   console.log(`Usage: npm run laya:run -- [classifier options] [--write]
 
-Refresh rigerc/autoskills' skills-map.ts, inspect it, start Dockerized
-Laya, classify the catalog (or built-in map), validate, then stop Docker.
+Refresh rigerc/autoskills' skills-map.ts, inspect it, classify using Dockerized
+Laya (default) or OpenCode Zen's Jev API (no Docker), then validate.
 Without --write the catalog is never changed by this workflow.
 
   --write              Sync catalog entries and add high-scoring Laya tags
                        (implies --threshold 0.90 unless specified)
   --mode catalog|map   Classifier mode (default: catalog)
+  --provider NAME      laya (default) or opencode-zen
+  --model NAME         english for Laya, jev-1.13-free for OpenCode
+  --opencode-url URL   Jev endpoint (official OpenCode or localhost test)
   --limit N            Classify a sample
   --threshold N        Minimum probability for a suggested tag
   --tech-batch-size N  Technologies per question group (default 8)
@@ -34,9 +37,9 @@ function argumentsForClassifier(argv) {
   }
   const noFallback = argv.includes('--no-fallback');
   const forwarded = argv.filter(flag => flag !== '--no-fallback');
-  const valueOptions = new Set(['--mode', '--catalog', '--model', '--laya-url', '--output',
+  const valueOptions = new Set(['--mode', '--catalog', '--provider', '--model', '--laya-url', '--opencode-url', '--output',
     '--threshold', '--min-domain', '--tech-batch-size', '--chunk-chars', '--fallback-limit', '--batch-size', '--limit']);
-  let mode = 'catalog', write = false, threshold = false, output = false;
+  let mode = 'catalog', provider = 'laya', write = false, threshold = false, output = false;
   for (let i = 0; i < forwarded.length; i++) {
     const flag = forwarded[i];
     if (flag === '--write') { write = true; continue; }
@@ -44,13 +47,21 @@ function argumentsForClassifier(argv) {
       throw new Error(`Unknown or missing classifier argument: ${flag}`);
     }
     if (flag === '--mode') mode = forwarded[i + 1];
+    if (flag === '--provider') provider = forwarded[i + 1];
     if (flag === '--threshold') threshold = true;
     if (flag === '--output') output = true;
     i++;
   }
   if (!['catalog', 'map'].includes(mode)) throw new Error('mode must be catalog or map');
+  if (!['laya', 'opencode-zen'].includes(provider)) throw new Error('provider must be laya or opencode-zen');
+  if (provider === 'laya' && forwarded.includes('--opencode-url')) {
+    throw new Error('--opencode-url requires --provider opencode-zen');
+  }
+  if (provider === 'opencode-zen' && forwarded.includes('--laya-url')) {
+    throw new Error('--laya-url requires --provider laya');
+  }
   if (write && mode !== 'catalog') throw new Error('--write is only valid in catalog mode');
-  return { mode, write, args: [
+  return { mode, provider, write, args: [
     ...forwarded,
     ...(noFallback ? ['--no-fallback'] : []),
     ...(write && !threshold ? ['--threshold', '0.90'] : []),
@@ -71,6 +82,10 @@ async function run(executable, args) {
 async function main() {
   const cfg = argumentsForClassifier(process.argv.slice(2));
   if (!cfg) return;
+  if (cfg.provider === 'opencode-zen' &&
+      !(process.env.OPENCODE_API_KEY || process.env.OPENCODE_ZEN_API_KEY)) {
+    throw new Error('Set OPENCODE_API_KEY or OPENCODE_ZEN_API_KEY for OpenCode Zen Jev');
+  }
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   const dockerArgs = ['compose', '-f', 'compose.laya.yml'];
   // Refresh and inspect the map before any catalog edits or Docker work.
@@ -84,8 +99,10 @@ async function main() {
   let started = false;
   let failed = null;
   try {
-    started = true; // also clean up a partially started service
-    await run('docker', [...dockerArgs, 'up', '-d', '--build', '--wait']);
+    if (cfg.provider === 'laya') {
+      started = true; // also clean up a partially started service
+      await run('docker', [...dockerArgs, 'up', '-d', '--build', '--wait']);
+    }
     await run(process.execPath, ['scripts/classify-skills.mjs', ...cfg.args]);
     await run(npm, ['run', 'catalog:check']);
     await run(npm, ['test']);
@@ -98,7 +115,7 @@ async function main() {
     }
   }
   if (failed) throw failed;
-  console.log(`Laya classification complete (${cfg.mode}${cfg.write ? ', catalog updated' : ', report only'}).`);
+  console.log(`Classification complete (${cfg.provider}, ${cfg.mode}${cfg.write ? ', catalog updated' : ', report only'}).`);
 }
 
 main().catch(error => { console.error(`Error: ${error.message}`); process.exitCode = 1; });

@@ -2,6 +2,12 @@
 
 A standalone GitHub-hosted skills registry for the [`rigerc/autoskills`](https://github.com/rigerc/autoskills) fork. The registry follows [its version-1 catalog specification](https://github.com/rigerc/autoskills/blob/main/packages/autoskills/docs/catalog.md).
 
+**Jev via OpenCode Zen (no Docker):** set `OPENCODE_API_KEY`
+to your Zen API key, then run `npm run laya:run:jev` (or
+`npm run laya:run:jev -- --write` to update the catalog).
+`jev-1.13-free` is served by **OpenCode Zen**, not the documented
+OpenCode Go models API; see [provider details](docs/laya-classification.md#opencode-zen-jev-113-free-no-docker).
+
 ## Structure
 
 ```text

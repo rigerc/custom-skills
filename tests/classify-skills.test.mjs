@@ -54,7 +54,7 @@ async function fixture(t) {
 
 async function mockServer(t) {
   const requests = [];
-  const state = { truncated: false, uncertain: false, denyFallback: false };
+  const state = { truncated: false, uncertain: false, denyFallback: false, httpStatus: 200, strict: false };
   const server = createServer(async (request, response) => {
     try {
       if (!['/v1/systemone', '/v1/systemone/batch'].includes(request.url)) {
@@ -64,12 +64,16 @@ async function mockServer(t) {
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      requests.push({ path: request.url, body });
+      requests.push({ path: request.url, body, authorization: request.headers.authorization });
+      if (state.httpStatus !== 200) {
+        response.writeHead(state.httpStatus).end('Request rejected');
+        return;
+      }
       const predict = (text) => {
         const answers = {};
         for (const key of Object.keys(body.questions)) {
           answers[key] = key === 'domain'
-            ? { type: 'choice', choice: 'tooling_cli', answer_confidence: 0.94 }
+            ? (state.strict ? { type: 'choice', choice: 'tooling_cli', probabilities: {tooling_cli:0.94}, confidence:0.94 } : { type: 'choice', choice: 'tooling_cli', answer_confidence: 0.94 })
             : { type: 'noul', noul:
               (text.includes('Agent skill: ink-tui') && body.questions[key].instructions.includes('(ink)')) ||
               (text.includes('Agent skill: shell-runner') && body.questions[key].instructions.includes('(bash)'))
@@ -94,7 +98,12 @@ async function mockServer(t) {
 }
 
 async function run(...args) {
+  return runEnv({}, ...args);
+}
+
+async function runEnv(env, ...args) {
   const child = spawn(process.execPath, [script, ...args], {
+    env: {...process.env, ...env},
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '', stderr = '';
@@ -330,4 +339,99 @@ test('unmapped existing tags are reported explicitly', async t => {
   const record=report.records.find(x=>x.id==='manual-utility');
   assert.deepEqual(record.unknownExistingTechnologies,['nonexistent-tech']);
   assert.equal(record.needsReview,true);
+});
+
+test('OpenCode Zen Jev authenticates and sends unbatched System One payloads', async t => {
+  const f=await fixture(t), server=await mockServer(t);
+  server.state.strict=true;
+  await runEnv({OPENCODE_API_KEY:'test-secret'},
+    '--provider','opencode-zen','--opencode-url',server.url+'/v1/systemone',
+    '--map',f.map,'--catalog',f.catalog,'--output',f.output,
+    '--no-fallback');
+  assert.ok(server.requests.length >= 3);
+  assert.ok(server.requests.every(r=>r.path==='/v1/systemone'));
+  assert.ok(server.requests.every(r=>r.authorization==='Bearer test-secret'));
+  assert.ok(server.requests.every(r=>r.body.model==='jev-1.13-free'));
+  assert.ok(server.requests.every(r=>typeof r.body.state==='string' && !r.body.states));
+  const report=JSON.parse(await readFile(f.output,'utf8'));
+  assert.equal(report.provider,'opencode-zen');
+  assert.equal(report.model,'jev-1.13-free');
+  assert.equal(report.records[0].domain,'tooling_cli');
+  assert.deepEqual(report.records[0].proposedAdditions,['ink']);
+});
+
+test('OpenCode Zen Jev writes approved tags without Docker', async t => {
+  const f=await fixture(t), server=await mockServer(t);
+  await runEnv({OPENCODE_ZEN_API_KEY:'test-zen-secret',OPENCODE_API_KEY:''},
+    '--provider','opencode-zen','--opencode-url',server.url+'/v1/systemone',
+    '--map',f.map,'--catalog',f.catalog,'--output',f.output,
+    '--write','--threshold','0.95');
+  assert.ok(server.requests.every(r=>r.authorization==='Bearer test-zen-secret'));
+  const catalog=JSON.parse(await readFile(f.catalog,'utf8'));
+  assert.deepEqual(catalog.skills[0].technologies,['ink']);
+  assert.deepEqual(catalog.skills[1].technologies,['bash']);
+  const report=JSON.parse(await readFile(f.output,'utf8'));
+  assert.equal(report.changedCatalog,true);
+});
+
+test('OpenCode Jev refuses missing key before sending requests', async t => {
+  const f=await fixture(t), server=await mockServer(t);
+  const child=spawn(process.execPath,[script,'--provider','opencode-zen',
+    '--opencode-url',server.url+'/v1/systemone','--map',f.map,
+    '--catalog',f.catalog,'--output',f.output],{
+      env:{...process.env,OPENCODE_API_KEY:'',OPENCODE_ZEN_API_KEY:''},
+      stdio:['ignore','pipe','pipe'],
+    });
+  let err='';child.stderr.on('data',c=>{err+=c;});
+  const status=await new Promise(done=>child.once('close',done));
+  assert.notEqual(status,0);
+  assert.match(err,/OPENCODE_API_KEY/);
+  assert.equal(server.requests.length,0);
+});
+
+test('OpenCode Jev surfaces HTTP authorization failures without leaking secrets', async t => {
+  const f=await fixture(t), server=await mockServer(t);
+  server.state.httpStatus=401;
+  const child=spawn(process.execPath,[script,'--provider','opencode-zen',
+    '--opencode-url',server.url+'/v1/systemone','--map',f.map,
+    '--catalog',f.catalog,'--output',f.output],{
+      env:{...process.env,OPENCODE_API_KEY:'do-not-log'},
+      stdio:['ignore','pipe','pipe'],
+    });
+  let err='';child.stderr.on('data',c=>{err+=c;});
+  const status=await new Promise(done=>child.once('close',done));
+  assert.notEqual(status,0);
+  assert.match(err,/HTTP 401/);
+  assert.doesNotMatch(err,/do-not-log/);
+});
+
+test('rejects non-OpenCode credential endpoints and conflicting options', async t => {
+  const f=await fixture(t), server=await mockServer(t);
+  const invalid=[
+    ['--provider','opencode-zen','--opencode-url','https://malicious.example/v1/systemone'],
+    ['--provider','laya','--opencode-url',server.url+'/v1/systemone'],
+    ['--provider','opencode-zen','--laya-url',server.url],
+  ];
+  for (const extra of invalid) {
+    const child=spawn(process.execPath,[script,'--map',f.map,'--catalog',f.catalog,...extra],{
+      env:{...process.env,OPENCODE_API_KEY:'test'},
+      stdio:['ignore','pipe','pipe'],
+    });
+    let err='';child.stderr.on('data',c=>{err+=c;});
+    const status=await new Promise(done=>child.once('close',done));
+    assert.notEqual(status,0);
+    assert.match(err,/requires|official OpenCode/);
+  }
+  assert.equal(server.requests.length,0);
+});
+
+test('OpenCode Jev map mode emulates batches using individual System One calls', async t => {
+  const f=await fixture(t), server=await mockServer(t);
+  await runEnv({OPENCODE_API_KEY:'test'},
+    '--provider','opencode-zen','--opencode-url',server.url+'/v1/systemone',
+    '--mode','map','--map',f.map,'--output',f.output,'--batch-size','3');
+  const report=JSON.parse(await readFile(f.output,'utf8'));
+  assert.equal(report.records.length,4);
+  assert.equal(server.requests.length,4);
+  assert.ok(server.requests.every(r=>r.path==='/v1/systemone'));
 });
