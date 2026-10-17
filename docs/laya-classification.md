@@ -85,51 +85,56 @@ also pass `--laya-url https://your-server.example` to use an existing
 Laya server, with optional `LAYA_API_KEY` for bearer authorization.
 Do not expose an unauthenticated inference service publicly.
 
-## Complete SKILL.md and all-technology evaluation
+## Compact skill profiles and targeted evidence
 
-Catalog mode now reads the **complete `SKILL.md`** rather than just the
-catalog ID and description. Local `path` entries are read from
-`path/SKILL.md`, relative to the catalog; `repository` +
-`directory` entries are downloaded from the GitHub Contents API's default
-branch (set `GITHUB_TOKEN` when authentication is needed). If a source is
-missing, malformed, outside the catalog root, or oversized (over 1 MiB),
-classification **fails rather than falling back** to the short description.
+Catalog classification builds a **deterministic, locally cached skill profile**
+from the catalog description plus SKILL.md frontmatter tags, activation/
+prerequisite sections, an overview, headings, and tool or command names.
+It reads the source Markdown **locally** (or downloads remote GitHub skill
+sources to the host), but **does not send full SKILL.md to Laya**. The
+profile is limited to **850 characters** and cached under gitignored
+`.cache/laya/profiles/`, keyed by a SHA-256 digest of source and metadata.
 
-The classifier divides the whole Markdown document into overlapping,
-**700-character windows** by default. Every source character is evaluated;
-it does not silently truncate the file in JavaScript. It asks Laya about
-**every technology ID** in the refreshed `SKILLS_MAP`, including
-technologies not mentioned by name or keywords in the skill metadata.
-It uses `/v1/systemone/batch` with bounded groups of eight technology
-questions and four document windows per HTTP call by default. Both
-sizes are configurable:
+The primary inference sends one compact profile per skill, and evaluates
+**every** technology ID in the refreshed AutoSkills map. Questions contain
+technology names and detection hints (package names, file extensions,
+config filenames and common aliases). AutoSkills' TypeScript map is parsed
+as data, never executed.
+
+For primary YES scores near the threshold (within 0.14 below or 0.06 above),
+Laya rechecks a **targeted, bounded excerpt** from the most relevant
+Markdown section, up to 600 characters. The fallback score **replaces** the
+initial score: contradictory evidence can reject a false positive. No
+more than 12 borderline technologies per skill are rechecked by default.
+Skipped rechecks are flagged for review and cannot be auto-added.
+Low-confidence domains also receive one targeted recheck.
 
 ```bash
-npm run laya:run -- --chunk-chars 600 --tech-batch-size 6 --batch-size 2
-npm run laya:run -- --write --threshold 0.95
+npm run laya:run                      # Compact profile, all map IDs
+npm run laya:run -- --write           # Opt-in additive catalog changes
+npm run laya:run -- --limit 1         # Try one skill
+npm run laya:run -- --fallback-limit 8 --chunk-chars 500
+npm run laya:run -- --no-fallback     # Primary-only diagnostic run
 ```
 
-For each technology, the report stores the **maximum model YES probability
-across all windows** and the index of the strongest window.
-This aggregates relevant evidence from anywhere in `SKILL.md`, but
-maximum-over-windows scores can overstate relevance for long skills or
-incidental mentions. It is **not a calibrated document-level probability**.
-The domain is selected by summed per-window domain confidence.
-The report includes source path, window count, evaluated technology count
-and the indices of any model-truncated windows.
+`--tech-batch-size` controls technology questions per HTTP request
+(default 8, maximum 63). In the normal case it takes approximately
+`ceil(technology count / 8)` requests per skill, rather than
+multiplying by every Markdown window. Targeted rechecks add some requests.
+Laya can still report truncation if the input exceeds the model's context;
+truncated responses prevent any tag write for the affected skill.
 
-**Write safety:** If Laya reports any truncated request for a skill,
-the script will not add *any* tags for that skill. Unreadable files or
-invalid/incomplete prediction responses abort classification; the catalog
-is written only after every selected skill is processed successfully.
-`--write` remains opt-in and additive-only.
+Reports contain `profileChars`, `profileCacheHit`, `requests`,
+each technology's `profileProbability`, final `probability`,
+and `evidenceUsed`, plus `skippedFallback`, `truncation` and
+`unknownExistingTechnologies`. Pre-existing technology IDs absent
+from AutoSkills' map (for example an unsupported `ink` ID) are flagged
+for review, not silently deleted. The script commits additive updates only
+after **every** selected skill finishes successfully. Laya scores are not
+calibrated; review catalog changes before committing.
 
-Evaluating every technology against every source window increases inference
-time substantially, especially for long Markdown documents on the CPU
-checkpoint. For a small trial use `--limit 1` before running the full
-catalog. Content is chunked because the default Laya English model's
-context window is short; model-side truncation is detected but may require
-reducing `--chunk-chars`.
+Remote GitHub skill content can change between runs; pin revisions upstream
+if you need repeatable source content.
 
 ## Modes and commands
 

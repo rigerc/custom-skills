@@ -16,7 +16,9 @@ Without --write the catalog is never changed by this workflow.
   --limit N            Classify a sample
   --threshold N        Minimum probability for a suggested tag
   --tech-batch-size N  Technologies per question group (default 8)
-  --chunk-chars N      Characters per SKILL.md window (default 700)
+  --chunk-chars N      Maximum selected evidence excerpt (default 600)
+  --fallback-limit N   Borderline technology rechecks per skill (default 12)
+  --no-fallback        Diagnose the compact profile alone
   --output PATH        Report destination
   --help               Print this help
 
@@ -30,16 +32,18 @@ function argumentsForClassifier(argv) {
   if (argv.includes('--map') || argv.includes('--inspect-map')) {
     throw new Error('laya:run always downloads the upstream map; use the standalone classifier for --map/--inspect-map');
   }
+  const noFallback = argv.includes('--no-fallback');
+  const forwarded = argv.filter(flag => flag !== '--no-fallback');
   const valueOptions = new Set(['--mode', '--catalog', '--model', '--laya-url', '--output',
-    '--threshold', '--min-domain', '--tech-batch-size', '--chunk-chars', '--batch-size', '--limit']);
+    '--threshold', '--min-domain', '--tech-batch-size', '--chunk-chars', '--fallback-limit', '--batch-size', '--limit']);
   let mode = 'catalog', write = false, threshold = false, output = false;
-  for (let i = 0; i < argv.length; i++) {
-    const flag = argv[i];
+  for (let i = 0; i < forwarded.length; i++) {
+    const flag = forwarded[i];
     if (flag === '--write') { write = true; continue; }
-    if (!valueOptions.has(flag) || !argv[i + 1] || argv[i + 1].startsWith('--')) {
+    if (!valueOptions.has(flag) || !forwarded[i + 1] || forwarded[i + 1].startsWith('--')) {
       throw new Error(`Unknown or missing classifier argument: ${flag}`);
     }
-    if (flag === '--mode') mode = argv[i + 1];
+    if (flag === '--mode') mode = forwarded[i + 1];
     if (flag === '--threshold') threshold = true;
     if (flag === '--output') output = true;
     i++;
@@ -47,7 +51,8 @@ function argumentsForClassifier(argv) {
   if (!['catalog', 'map'].includes(mode)) throw new Error('mode must be catalog or map');
   if (write && mode !== 'catalog') throw new Error('--write is only valid in catalog mode');
   return { mode, write, args: [
-    ...argv,
+    ...forwarded,
+    ...(noFallback ? ['--no-fallback'] : []),
     ...(write && !threshold ? ['--threshold', '0.90'] : []),
     ...(!output ? ['--output', mode === 'map' ? 'autoskills-classified.json' : 'skill-classifications.json'] : []),
     '--map', resolve(process.env.AUTOSKILLS_MAP_CACHE || '.cache/autoskills/skills-map.ts'),

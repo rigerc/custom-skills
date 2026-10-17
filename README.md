@@ -142,10 +142,11 @@ npm run laya:run -- --limit 5       # First five custom skills
 npm run laya:run -- --mode map      # Built-in AutoSkills domain report
 ```
 
-Catalog classification reads each skill's complete `SKILL.md` and scores every
-mapped AutoSkills technology across bounded overlapping windows. The run can
-therefore take substantially longer than the previous keyword-shortlisted
-classifier. `--chunk-chars` and `--tech-batch-size` control its batching.
+Catalog classification builds a compact profile from skill metadata,
+headings, activation conditions, and tools. It scores every mapped AutoSkills
+technology against that profile, with small Markdown excerpts used only to
+recheck borderline decisions. Full SKILL.md is not sent to Laya.
+The fallback and batch sizes can be configured.
 
 The map snapshot is stored under the gitignored `.cache/` directory
 and verified before Docker starts. `--write` is opt-in, defaults to

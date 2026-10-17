@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readSkillMarkdown, skillChunks } from '../scripts/skill-source.mjs';
+import { buildSkillProfile, cachedSkillProfile, selectedEvidence, technologyQuestion } from '../scripts/skill-profile.mjs';
 
 const script = resolve('scripts/classify-skills.mjs');
 
@@ -53,7 +54,7 @@ async function fixture(t) {
 
 async function mockServer(t) {
   const requests = [];
-  const state = { truncated: false };
+  const state = { truncated: false, uncertain: false, denyFallback: false };
   const server = createServer(async (request, response) => {
     try {
       if (!['/v1/systemone', '/v1/systemone/batch'].includes(request.url)) {
@@ -72,7 +73,8 @@ async function mockServer(t) {
             : { type: 'noul', noul:
               (text.includes('Agent skill: ink-tui') && body.questions[key].instructions.includes('(ink)')) ||
               (text.includes('Agent skill: shell-runner') && body.questions[key].instructions.includes('(bash)'))
-                ? 0.96 : 0.02 };
+                ? (state.uncertain ? (text.includes('Section:') ?
+                    (state.denyFallback ? 0.10 : 0.97) : 0.88) : 0.96) : 0.02 };
         }
         return { model: 'laya-rl-agent', answers,
           usage: { truncated: state.truncated, truncated_questions: state.truncated ? ['domain'] : [] } };
@@ -131,8 +133,10 @@ test('catalog mode reports suggestions and leaves catalog unchanged by default',
   assert.deepEqual(ink.proposedAdditions, ['ink']);
   assert.equal(ink.technologyCount, 2);
   assert.deepEqual(ink.suggestions.map(x => x.id).sort(), ['bash', 'ink']);
-  assert.ok(ink.chunkCount > 1);
-  assert.ok(server.requests.some(r => r.body.states?.some(s => s.includes('END_OF_INK_SKILL'))));
+  assert.ok(ink.profileChars <= 850);
+  assert.ok(ink.requests <= 2);
+  assert.ok(server.requests.every(r => r.body.states?.every(s => !s.includes('END_OF_INK_SKILL'))));
+  assert.ok(server.requests.every(r => r.body.states?.length === 1));
   const shell = report.records.find(x => x.id === 'shell-runner');
   assert.deepEqual(shell.existingTechnologies, ['bash']);
   assert.deepEqual(shell.proposedAdditions, []);
@@ -246,7 +250,84 @@ test('catalog technology scores cover every map entry regardless of lexical matc
   for (const record of report.records) {
     assert.deepEqual(record.suggestions.map(x => x.id).sort(), ['bash', 'ink']);
     assert.equal(record.technologyCount, 2);
-    assert.ok(record.suggestions.every(x => x.strongestChunk >= 1));
+    assert.ok(record.suggestions.every(x => Number.isFinite(x.profileProbability)));
   }
   assert.ok(server.requests.some(r => Object.keys(r.body.questions).length === 1));
+});
+
+test('profile extraction is deterministic, compact and cached by source digest', async t => {
+  const f = await fixture(t);
+  const skill = JSON.parse(await readFile(f.catalog, 'utf8')).skills[0];
+  const md = await readFile(join(f.dir, 'skills', 'ink-tui', 'SKILL.md'), 'utf8');
+  const profile = buildSkillProfile(skill, md);
+  assert.ok(profile.profileChars <= 850);
+  assert.match(profile.text, /Purpose:/);
+  assert.doesNotMatch(profile.text, /END_OF_INK_SKILL/);
+  const first = await cachedSkillProfile(skill, md, f.catalog);
+  const second = await cachedSkillProfile(skill, md, f.catalog);
+  assert.equal(first.cacheHit, false);
+  assert.equal(second.cacheHit, true);
+  assert.equal(first.text, second.text);
+  const third = await cachedSkillProfile(skill, md + '\nChanged', f.catalog);
+  assert.equal(third.cacheHit, false);
+});
+
+test('structured questions include AutoSkills detection signals', () => {
+  const q = technologyQuestion({
+    id:'mcp-sdk', name:'Model Context Protocol SDK',
+    detect:{packages:['@modelcontextprotocol/sdk'], pythonPackages:['mcp']},
+  });
+  assert.match(q.instructions,/Model Context Protocol SDK/);
+  assert.match(q.instructions,/@modelcontextprotocol\/sdk/);
+  assert.match(q.instructions,/mcp/);
+});
+
+test('targeted evidence chooses relevant sections, not whole Markdown', () => {
+  const md = '# Skill\n## Overview\nIntro content unrelated.\n' +
+    '## Tool configuration\nUses Ink to render a TUI.\n' +
+    '## References\n' + 'large unrelated paragraph '.repeat(300);
+  const excerpt = selectedEvidence(md, {id:'ink',name:'Ink',detect:{packages:['ink']}}, 260);
+  assert.match(excerpt,/Ink to render a TUI/);
+  assert.doesNotMatch(excerpt,/large unrelated paragraph/);
+  assert.ok(excerpt.length < 340);
+});
+
+test('uncertain profile decisions use targeted fallback before write', async t => {
+  const f = await fixture(t), server = await mockServer(t);
+  server.state.uncertain = true;
+  await run('--map',f.map,'--catalog',f.catalog,'--laya-url',server.url,
+    '--output',f.output,'--write','--threshold','0.90');
+  const report=JSON.parse(await readFile(f.output,'utf8'));
+  const ink=report.records.find(r=>r.id==='ink-tui');
+  const guess=ink.suggestions.find(s=>s.id==='ink');
+  assert.equal(guess.profileProbability,0.88);
+  assert.equal(guess.probability,0.97);
+  assert.equal(guess.evidenceUsed,true);
+  assert.deepEqual(ink.proposedAdditions,['ink']);
+  assert.ok(server.requests.some(r=>r.body.states?.some(s=>s.includes('Section:'))));
+  assert.ok(server.requests.every(r=>r.body.states?.every(s=>!s.includes('END_OF_INK_SKILL'))));
+});
+
+test('targeted fallback can reject an ambiguous high score', async t => {
+  const f=await fixture(t),server=await mockServer(t);
+  server.state.uncertain=true;
+  server.state.denyFallback=true;
+  await run('--map',f.map,'--catalog',f.catalog,'--laya-url',server.url,
+    '--output',f.output,'--write','--threshold','0.85');
+  const report=JSON.parse(await readFile(f.output,'utf8'));
+  const ink=report.records.find(r=>r.id==='ink-tui');
+  assert.equal(ink.suggestions.find(x=>x.id==='ink').probability,0.10);
+  assert.deepEqual(ink.proposedAdditions,[]);
+});
+
+test('unmapped existing tags are reported explicitly', async t => {
+  const f=await fixture(t),server=await mockServer(t);
+  const catalog=JSON.parse(await readFile(f.catalog,'utf8'));
+  catalog.skills[2].technologies=['nonexistent-tech'];
+  await writeFile(f.catalog,JSON.stringify(catalog));
+  await run('--map',f.map,'--catalog',f.catalog,'--laya-url',server.url,'--output',f.output);
+  const report=JSON.parse(await readFile(f.output,'utf8'));
+  const record=report.records.find(x=>x.id==='manual-utility');
+  assert.deepEqual(record.unknownExistingTechnologies,['nonexistent-tech']);
+  assert.equal(record.needsReview,true);
 });
