@@ -15,13 +15,16 @@ A standalone GitHub-hosted skills registry for the [`rigerc/autoskills`](https:/
 │   ├── ink/
 │   │   ├── SKILL.md
 │   │   └── references/{components,hooks,patterns,render-api}.md
-│   └── serena-usage/
+│   ├── serena-usage/
+│   │   ├── SKILL.md
+│   │   ├── CHANGELOG.md
+│   │   ├── LICENSE.txt
+│   │   ├── examples/refactoring-workflow.md
+│   │   ├── references/{memory-management,symbol-navigation}.md
+│   │   └── scripts/serena-memory-backup.ps1
+│   └── ue4ss-bridge/
 │       ├── SKILL.md
-│       ├── CHANGELOG.md
-│       ├── LICENSE.txt
-│       ├── examples/refactoring-workflow.md
-│       ├── references/{memory-management,symbol-navigation}.md
-│       └── scripts/serena-memory-backup.ps1
+│       └── references/tool-reference.md
 ├── scripts/
 │   ├── sync-catalog.mjs
 │   └── validate-catalog.mjs
@@ -57,6 +60,7 @@ A standalone GitHub-hosted skills registry for the [`rigerc/autoskills`](https:/
 | `gum-cli` | `"technologies": ["bash"]` | Recommended when the project contains `.sh` or `.bash` files. |
 | `ink` | `"technologies": ["ink"]` | Recommended when the project depends on `ink`, an `ink-*` package, or `@inkjs/*`. |
 | `serena-usage` | No mapping | Available for explicit selection; not installed by `-y` unless otherwise recommended. |
+| `ue4ss-bridge` | No mapping | Available for explicit selection; drives the `ue4ss-bridge` MCP server, so it stays manual-select. |
 
 Recommendation metadata lives only in `catalog.json` and is maintained by hand; it is never derived from `SKILL.md`. The sync action preserves `technologies` and `always` and only rewrites `description` and `path`.
 
