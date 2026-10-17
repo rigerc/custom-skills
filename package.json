@@ -14,7 +14,9 @@
     "laya:inspect-map": "node scripts/classify-skills.mjs --inspect-map",
     "laya:classify": "node scripts/classify-skills.mjs --mode catalog --output skill-classifications.json",
     "laya:classify:map": "node scripts/classify-skills.mjs --mode map --output autoskills-classified.json",
-    "laya:classify:write": "node scripts/classify-skills.mjs --mode catalog --threshold 0.9 --output skill-classifications.json --write"
+    "laya:classify:write": "node scripts/classify-skills.mjs --mode catalog --threshold 0.9 --output skill-classifications.json --write",
+    "laya:refresh-map": "node scripts/refresh-autoskills-map.mjs",
+    "laya:run": "node scripts/run-laya-classification.mjs"
   },
   "engines": {
     "node": ">=22.6.0"
