@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 
 const script = resolve('scripts/classify-skills.mjs');
 
@@ -12,7 +13,6 @@ async function fixture(t) {
   t.after(async () => rm(dir, { recursive: true, force: true }));
   const map = join(dir, 'skills-map.ts');
   const catalog = join(dir, 'catalog.json');
-  const laya = join(dir, 'mock-laya.mjs');
   const output = join(dir, 'report.json');
   await writeFile(map, `
     export const SKILLS_MAP: Technology[] = [
@@ -37,39 +37,64 @@ async function fixture(t) {
         path: 'skills/manual-utility' },
     ],
   }, null, 2) + '\n');
-  await writeFile(laya, `
-    export class Agent {
-      static async load() { return new Agent(); }
-      async predict(state, questions) {
-        const answers = {};
-        for (const key of Object.keys(questions)) {
-          if (key === 'domain') {
-            answers[key] = { type: 'choice', choice: 'tooling_cli', answer_confidence: 0.94 };
-          } else {
-            answers[key] = { type: 'noul', noul: 0.96 };
-          }
-        }
-        return { answers, usage: {} };
-      }
-      async predictBatch(states, questions) {
-        return Promise.all(states.map(state => this.predict(state, questions)));
-      }
-    }
-  `);
-  return { dir, map, catalog, laya, output };
+  return { dir, map, catalog, output };
 }
 
-function run(...args) {
-  const result = spawnSync(process.execPath, [script, ...args], {
-    encoding: 'utf8', timeout: 30_000,
+async function mockServer(t) {
+  const requests = [];
+  const state = { truncated: false };
+  const server = createServer(async (request, response) => {
+    try {
+      if (!['/v1/systemone', '/v1/systemone/batch'].includes(request.url)) {
+        response.writeHead(404).end('Not found');
+        return;
+      }
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      requests.push({ path: request.url, body });
+      const predict = (text) => {
+        const answers = {};
+        for (const key of Object.keys(body.questions)) {
+          answers[key] = key === 'domain'
+            ? { type: 'choice', choice: 'tooling_cli', answer_confidence: 0.94 }
+            : { type: 'noul', noul: 0.96 };
+        }
+        return { model: 'laya-rl-agent', answers,
+          usage: { truncated: state.truncated, truncated_questions: state.truncated ? ['domain'] : [] } };
+      };
+      const result = request.url.endsWith('/batch')
+        ? { results: body.states.map(predict), total_usage: {} }
+        : predict(body.state);
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(result));
+    } catch (error) {
+      response.writeHead(500).end(error.message);
+    }
   });
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  return result;
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  return { url: `http://127.0.0.1:${server.address().port}`, requests, state };
+}
+
+async function run(...args) {
+  const child = spawn(process.execPath, [script, ...args], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '', stderr = '';
+  child.stdout.on('data', chunk => { stdout += chunk; });
+  child.stderr.on('data', chunk => { stderr += chunk; });
+  const code = await new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', resolve);
+  });
+  assert.equal(code, 0, stderr || stdout);
+  return { stdout, stderr };
 }
 
 test('inspect-map parses TypeScript without executing it or loading Laya', async t => {
   const f = await fixture(t);
-  const result = run('--inspect-map', '--map', f.map);
+  const result = await run('--inspect-map', '--map', f.map);
   const json = JSON.parse(result.stdout);
   assert.equal(json.technologyCount, 2);
   assert.equal(json.mappedSkillCount, 4);
@@ -79,8 +104,11 @@ test('inspect-map parses TypeScript without executing it or loading Laya', async
 test('catalog mode reports suggestions and leaves catalog unchanged by default', async t => {
   const f = await fixture(t);
   const before = await readFile(f.catalog, 'utf8');
-  run('--map', f.map, '--catalog', f.catalog, '--laya', f.laya,
-    '--model', f.dir, '--output', f.output);
+  const server = await mockServer(t);
+  await run('--map', f.map, '--catalog', f.catalog, '--laya-url', server.url,
+    '--model', 'english', '--output', f.output);
+  assert.equal(server.requests[0].body.model, 'english');
+  assert.equal(server.requests[0].path, '/v1/systemone');
   assert.equal(await readFile(f.catalog, 'utf8'), before);
   const report = JSON.parse(await readFile(f.output, 'utf8'));
   assert.equal(report.mode, 'catalog');
@@ -97,8 +125,9 @@ test('catalog mode reports suggestions and leaves catalog unchanged by default',
 
 test('catalog --write adds only approved mappings without removing existing values', async t => {
   const f = await fixture(t);
-  run('--map', f.map, '--catalog', f.catalog, '--laya', f.laya,
-    '--model', f.dir, '--output', f.output, '--write', '--threshold', '0.95');
+  const server = await mockServer(t);
+  await run('--map', f.map, '--catalog', f.catalog, '--laya-url', server.url,
+    '--output', f.output, '--write', '--threshold', '0.95');
   const updated = JSON.parse(await readFile(f.catalog, 'utf8'));
   assert.deepEqual(updated.skills[0].technologies, ['ink']);
   assert.deepEqual(updated.skills[1].technologies, ['bash']);
@@ -109,12 +138,29 @@ test('catalog --write adds only approved mappings without removing existing valu
 
 test('map mode retains AutoSkills technologies and classifies slugs', async t => {
   const f = await fixture(t);
-  run('--mode', 'map', '--map', f.map, '--laya', f.laya,
-    '--model', f.dir, '--output', f.output, '--batch-size', '2');
+  const server = await mockServer(t);
+  await run('--mode', 'map', '--map', f.map, '--laya-url', server.url,
+    '--output', f.output, '--batch-size', '2');
+  assert.ok(server.requests.some(req => req.path === '/v1/systemone/batch'));
+  assert.ok(server.requests.every(req => req.body.model === 'english'));
   const report = JSON.parse(await readFile(f.output, 'utf8'));
   assert.equal(report.records.length, 4);
   assert.deepEqual(report.records.find(x => x.id === 'combo-skill').technologies.sort(),
     ['bash', 'ink']);
   assert.equal(report.records.find(x => x.id === 'frontend-skill').frontendBonus, true);
   assert.ok(report.records.every(x => x.domain === 'tooling_cli'));
+});
+
+test('catalog --write does not accept suggestions from truncated Laya responses', async t => {
+  const f = await fixture(t);
+  const server = await mockServer(t);
+  server.state.truncated = true;
+  const before = await readFile(f.catalog, 'utf8');
+  await run('--map', f.map, '--catalog', f.catalog, '--laya-url', server.url,
+    '--output', f.output, '--write');
+  assert.equal(await readFile(f.catalog, 'utf8'), before);
+  const report = JSON.parse(await readFile(f.output, 'utf8'));
+  assert.equal(report.changedCatalog, false);
+  assert.ok(report.records.every(record => record.needsReview));
+  assert.ok(report.records.every(record => record.proposedAdditions.length === 0));
 });

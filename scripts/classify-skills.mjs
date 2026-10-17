@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Classify AutoSkills built-in skills into broad domains, or suggest supported
- * AutoSkills technology IDs for custom-skills/catalog.json using laya-ts.
+ * AutoSkills technology IDs for custom-skills/catalog.json using the Dockerized Laya HTTP API.
  *
  * Requires Node >= 22, `typescript`, and a running Laya Docker HTTP service.
  * The AutoSkills TypeScript source is PARSED, never executed.

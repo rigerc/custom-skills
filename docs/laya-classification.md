@@ -1,146 +1,95 @@
-# Laya × AutoSkills classification
+# Laya × AutoSkills classification (Docker)
 
-`classify-skills.mjs` provides two modes:
+The classifier in `scripts/classify-skills.mjs` uses the upstream
+[Laya](https://github.com/NandhaKishorM/laya) HTTP inference API in Docker.
+No Python, PyTorch, `laya-ts`, ONNX export, or model files are required on
+the host. The host needs **Docker Engine / Docker Desktop with Compose v2**,
+**Node.js 22+**, and enough memory and storage (upstream recommends at least
+8 GB RAM and 10 GB free disk for the CPU image).
 
-- **`--mode catalog` (default):** Suggests existing AutoSkills technology IDs for entries in `rigerc/custom-skills/catalog.json`. Uses Laya's yes/no (`noul`) decisions over short-listed candidate technologies, and also adds a broad domain classification. Defaults to a report only, without changing `catalog.json`.
-- **`--mode map`:** Reads the fork's `SKILLS_MAP`, `COMBO_SKILLS_MAP`, and frontend bonus skills; retains the source technology IDs; uses Laya's `choice` classifier to assign each distinct built-in skill a broad domain (frontend, backend, etc.). Writes a report only.
+The pinned upstream Docker build is configured in
+[`compose.laya.yml`](../compose.laya.yml). It serves `/v1/systemone`
+and `/v1/systemone/batch` on loopback port 8000 by default. It keeps
+Hugging Face checkpoint downloads in a persistent Docker named volume.
+The first prediction downloads the English checkpoint and may take time.
+The health check only verifies the server is reachable, not that the
+checkpoint has been downloaded.
 
-The TypeScript map is parsed as data using the TypeScript AST, **not executed**. The default map is the **rigerc** fork (which includes `bash` and `ink`); override with `--map` to use a local checkout or another version. `catalog.json` is modified only with `--write`, which can **add** matched IDs but never delete an existing manual mapping. The catalog schema permits only the known AutoSkills technology IDs; domain classifications are stored in the **report**, not in `catalog.json`.
+## Start and stop Laya
 
-## Install
-
-Node.js 22+ recommended. From a clone of `rigerc/custom-skills`:
+From the root of this repository:
 
 ```bash
-npm install --no-save typescript@5.9.3
-# If using a laya-ts package installed from npm, also install onnxruntime-node.
-```
-
-If `laya-ts` is not available on npm, build it from the source repository:
-
-```bash
-git clone https://github.com/NandhaKishorM/laya.git
-cd laya/laya-ts
 npm install
-npm run build
-cd ../..
+npm run laya:up          # build upstream image, start server, wait for /health
+npm run laya:classify -- --limit 5
+npm run laya:down        # stop server; checkpoint volume is kept
 ```
 
-The Laya TypeScript runtime requires **split ONNX weights**, not just a PyTorch checkpoint. Export them once (large checkpoint download; sufficient disk/RAM required):
+Check `http://127.0.0.1:8000/health` to inspect liveness. `laya:up`
+builds from upstream commit `4ac226d5ee88ed6df8db288a05c766d7a34ee682`
+and the image uses the CPU backend. Docker caches the built image and
+checkpoint volume for subsequent runs. Changing the upstream revision
+requires editing the pinned Compose build context and image tag.
+
+To use another host port, set `LAYA_PORT` for Docker and
+`LAYA_URL=http://127.0.0.1:<port>` for the Node classifier. You can
+also pass `--laya-url https://your-server.example` to use an existing
+Laya server, with optional `LAYA_API_KEY` for bearer authorization.
+Do not expose an unauthenticated inference service publicly.
+
+## Modes and commands
+
+- **Catalog** (default): for each custom catalog entry, suggest technology IDs
+  that already exist in AutoSkills' `SKILLS_MAP` and assign a broad domain.
+  Report-only by default; `--write` can **add** tags but never delete
+  existing tags.
+- **Map**: classify the distinct built-in AutoSkills skill slugs into
+  domains while retaining each slug's original technology and combo IDs.
+
+The default TypeScript map is from
+[`rigerc/autoskills`](https://github.com/rigerc/autoskills). Its source
+is parsed as data via the TypeScript AST, **never executed**. For
+reproducibility, use `--map` with a local pinned `skills-map.ts`.
 
 ```bash
-python -m pip install laya transformers torch safetensors huggingface_hub onnx onnxruntime
-python laya/laya-ts/scripts/export_onnx.py --repo convaiinnovations/laya --out-dir ./model
+npm run laya:inspect-map   # AST parse only, no running Docker server needed
+npm run laya:classify      # report: skill-classifications.json
+npm run laya:classify:map -- --limit 10 --batch-size 2
+npm run laya:classify:write -- --limit 5 # opt-in catalog.json update
+npm run catalog:check
+npm test
 ```
 
-The `--model` directory must contain `encoder.onnx`, `head.onnx`, `tokenizer.json`, and `rl_agent_config.json` (plus any ONNX external-data sidecars). The script does not run the downloaded model automatically; export first. As an alternative, supply an equivalent trusted ONNX bundle compatible with upstream `laya-ts`.
+All scripts use the same `--laya-url` option (default
+`http://127.0.0.1:8000`, or `LAYA_URL`), and `--model` selects a Laya
+**server checkpoint name**, default `english`. It is not an ONNX model
+directory. `--output PATH` chooses the JSON report. The `--threshold`
+default is 0.80; the write convenience command sets it to 0.90. For
+`--mode map`, `--batch-size` can be at most 64 to satisfy the HTTP
+API's batch limit. `--inspect-map` needs neither HTTP nor weights.
 
-## Usage
+The reports retain per-skill domain confidence and proposed technology
+additions. `--write` refuses to add suggestions when the model indicates
+truncation (including `usage.truncated_questions`) and never overwrites
+existing IDs. **Laya confidence is not calibrated against this catalog**;
+review every proposed mapping against real skills before committing. A
+high score does not mean the ID is correct.
 
-This repository includes `scripts/classify-skills.mjs`. If you build Laya from source, pass the path of its ESM output:
+## Tests, trust, and resource usage
 
-```bash
-# Confirm the map can be parsed without loading a model:
-node scripts/classify-skills.mjs --inspect-map
+`npm test` exercises the classifier against a local HTTP fixture without
+building Docker or downloading checkpoints. The upstream image performs real
+inference; its first use requires internet access to fetch public weights.
+The image is based on upstream Laya at a pinned commit, but the downloaded
+Hugging Face weights are not SHA-pinned by this repository. Review their
+provenance before depending on them in a sensitive workflow.
 
-# Suggest tags for custom skills; write ONLY the report:
-node scripts/classify-skills.mjs --mode catalog --catalog catalog.json \
-  --model ./model --laya ./laya/laya-ts/dist/index.js \
-  --output ./catalog-classifications.json
+Only the classifier's report and optional local catalog write remain.
+The prior Laya-specific GitHub Actions workflows, composite cache action,
+and split-ONNX patch have been removed. Unrelated catalog synchronization
+and validation workflows are unchanged. There are **no scheduled
+classification runs or automatically generated classification PRs**.
 
-# After reviewing suggestions, add high-probability IDs to catalog:
-node scripts/classify-skills.mjs --mode catalog --catalog catalog.json \
-  --model ./model --laya ./laya/laya-ts/dist/index.js \
-  --threshold 0.9 --write
-
-# Classify the skills from AutoSkills' built-in map into semantic domains:
-node scripts/classify-skills.mjs --mode map --model ./model \
-  --laya ./laya/laya-ts/dist/index.js \
-  --output ./autoskills-classified.json
-
-# Quick sample before classifying hundreds of built-in skills:
-node scripts/classify-skills.mjs --mode map --limit 10 --batch-size 2 \
-  --model ./model --laya ./laya/laya-ts/dist/index.js
-```
-
-If you installed `laya-ts` as an npm package, omit `--laya`. If `laya` lives in a sibling repository, use `--laya ../laya/laya-ts/dist/index.js` instead.
-
-## Review and limitations
-
-- Laya's `noul` answer is P(yes); the default automatic suggestion threshold is **0.80**. This is not a calibrated probability that a technology tag is genuinely correct on AutoSkills data, and should be validated against hand-labeled examples before relying on `--write` in production.
-- Candidate IDs are chosen with conservative literal matches against skill ID, description, technology ID/name, and selected detection hints; Laya can only evaluate shortlisted candidates. No lexical candidates means manual-only. For example, `serena-usage` may remain unmapped, consistent with its source registry.
-- A built-in map may associate a skill with multiple technologies, which is preserved in `--mode map` output. Frontend bonus skills are reported with `frontendBonus: true` and do not invent an AutoSkills technology ID.
-- Use a **pinned** git revision or a local `--map` for reproducibility. Download and review any dependencies/models before deploying in CI. All skill contents are potentially untrusted prompts; the script treats metadata as data, without executing skills.
-- If you use `--write`, consider running `npm run catalog:check` and `npm test` from the custom registry afterward.
-## GitHub Actions integration
-
-The [Classify skills with Laya](../.github/workflows/classify-skills.yml) workflow
-has two separate trust levels:
-
-1. **PRs:** run the TypeScript-AST parser and mock-Laya regression tests only.
-   There is no model download and no write token.
-2. **Pushes to `main`, weekly schedules, or manual dispatch:** run real ONNX
-   classification in read-only mode. A successful run uploads its JSON report
-   as a 30-day artifact and writes a short summary with classification counts,
-   technology suggestions, and manual-review flags.
-
-A manual run selects `catalog` or `map` mode, a record limit, and a
-probability threshold. Weekly runs default to catalog mode. Report confidence
-is **not calibrated** for the custom skill registry, so all suggestions require
-human review.
-
-### Faster startup with a prepared model cache
-
-The [Warm Laya model cache](../.github/workflows/warm-laya-cache.yml)
-workflow runs on **Sunday and Thursday at 05:43 UTC**, or manually via
-**Actions → Warm Laya model cache → Run workflow**. It prepares the English
-split-ONNX checkpoint once and saves the model files into a shared GitHub
-Actions cache. The Monday **06:19 UTC** report ordinarily restores that cache
-instead of exporting a fresh model.
-
-Both workflows call [the same composite model action](../.github/actions/laya-model/action.yml)
-to restore, validate, export on a miss, and save the ONNX files. On a cache
-miss it uses pinned **CPU-only PyTorch 2.9.0**, avoiding the download of
-unused CUDA dependencies. Incomplete cached bundles cause an explicit
-failure instead of a misleading inference error. To invalidate a corrupt or
-obsolete cache, increment the version in the composite action's cache key.
-
-The pinned upstream exporter in Laya 0.4.8 declares
-`batch_dim` with `min=1`; on PyTorch 2.9 the encoder trace generates a guard
-that excludes batch size one. The model preparation action applies a narrow,
-tested patch in the temporary upstream checkout, setting the export-only
-minimum to **2**. It also sets the markers minimum to **2**, consistent with
-the head's `topk(2)`. The exporter keeps its actual **batch-one verification**
-of the produced ONNX graphs enabled. If the pinned exporter source does not
-match the expected definitions, the patch fails rather than proceeding with
-unreviewed changes. This adjustment has not yet passed a complete real-model
-export; the verification stage will provide the compatibility check.
-
-The first cache miss still requires the large Hugging Face checkpoint and
-ONNX export, which can be slow or exceed a hosted runner's available resources.
-Cache availability, retention, and quotas depend on GitHub; warming is a
-best-effort optimization, not a guarantee. The Laya source checkout is pinned
-to `4ac226d5ee88ed6df8db288a05c766d7a34ee682`. The Hugging Face
-checkpoint download is **not** pinned to a snapshot revision, so the cache
-key is not a cryptographic model provenance guarantee. Model weights are not
-committed to this repository.
-
-### Optional reviewed catalog updates
-
-A manual **catalog** run on the **default branch** can enable
-`propose_updates`. The classifier may append valid `SKILLS_MAP` technology
-IDs whose model score passes the chosen threshold; existing tags are retained.
-It then publishes the proposed catalog as a short-lived artifact. A **separate
-`propose` job** downloads this artifact, runs catalog synchronization checks
-and the complete tests, and opens a review-only PR affecting `catalog.json`.
-
-This separates permissions: the heavy classifier job has **contents: read**,
-while only the explicitly requested proposal job receives
-**contents: write** and **pull-requests: write**. Neither job merges proposals.
-The repository must enable **Settings → Actions → General → Allow GitHub
-Actions to create and approve pull requests** for proposal creation to work.
-
-The [Sync AutoSkills catalog](../.github/workflows/sync-catalog.yml)
-workflow remains separate and now installs the same pinned TypeScript parser
-before its complete test suite. It continues to own catalog description/path
-reconciliation, not Laya-generated technology tags.
+Run `npm run laya:down` when finished. The named model cache persists;
+remove it manually only when you deliberately want to reclaim disk space.
