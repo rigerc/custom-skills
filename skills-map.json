@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "registryId": "example/agent-skills",
+  "registryId": "rigerc/custom-skills",
   "alwaysRecommend": [],
   "externalSkills": [],
   "technologies": [],
