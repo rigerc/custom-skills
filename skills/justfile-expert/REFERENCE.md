@@ -1,5 +1,16 @@
 # Justfile Expert - Detailed Reference
 
+## Contents
+
+- [Golden Justfile Template](#golden-justfile-template)
+- [Complete Syntax Reference](#complete-syntax-reference)
+- [Advanced Patterns](#advanced-patterns)
+- [Module System](#module-system)
+- [Integration Examples](#integration-examples)
+- [Language-Specific Templates](#language-specific-templates)
+- [Troubleshooting](#troubleshooting)
+- [Quick Reference](#quick-reference)
+
 ## Golden Justfile Template
 
 Use this template as a starting point for new projects. Uncomment and adapt recipes for your technology stack.

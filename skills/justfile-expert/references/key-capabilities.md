@@ -1,6 +1,6 @@
 # Justfile Expert — Key Capabilities
 
-Parameter forms, settings, recipe attributes, and the module system, for [SKILL.md](../SKILL.md). Complete syntax reference: [REFERENCE.md](../REFERENCE.md).
+Parameter forms, settings, recipe attributes, and the module system, for [SKILL.md](../SKILL.md). Complete syntax reference: `REFERENCE.md` at the skill root.
 
 ## Key Capabilities
 

@@ -1,5 +1,5 @@
 ---
-name: knap
+name: knap-skill
 description: Write, explain, validate, and render Knap templates for Markdown or text output. Use for Knap variables, filters, conditions, loops, local assignments, CLI rendering, or batch generation; do not apply to unrelated Jinja, Liquid, or Mustache templates.
 ---
 

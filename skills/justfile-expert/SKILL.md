@@ -5,7 +5,7 @@ reviewed: 2026-02-06
 name: justfile-expert
 description: Just command runner expertise — Justfile syntax, recipes, parameters, modules, shebang recipes. Use when authoring justfiles, project commands, or task automation.
 user-invocable: false
-allowed-tools: Bash, Grep, Glob, Read, Write, Edit, TodoWrite
+allowed-tools: Bash(just:*), Bash(python3:*), Grep, Glob, Read, Write, Edit, TodoWrite
 model: sonnet
 ---
 

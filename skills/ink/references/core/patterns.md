@@ -1,5 +1,20 @@
 # Common Patterns
 
+## Contents
+
+- [Counter with Timer](#counter-with-timer)
+- [Task Runner (Static + Live)](#task-runner-static--live)
+- [Keyboard Navigation Menu](#keyboard-navigation-menu)
+- [Chat/Text Input](#chattext-input)
+- [Focus Cycling](#focus-cycling)
+- [Subprocess Output](#subprocess-output)
+- [Responsive Layout](#responsive-layout)
+- [Progress Bar](#progress-bar)
+- [Table with Columns](#table-with-columns)
+- [Router with React Router](#router-with-react-router)
+- [Suspense with Data Fetching](#suspense-with-data-fetching)
+- [Exit with Result](#exit-with-result)
+
 ## Counter with Timer
 
 The most basic Ink pattern — state updates over time:

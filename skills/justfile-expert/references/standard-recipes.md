@@ -1,6 +1,6 @@
 # Justfile Expert — Standard and Workflow Recipes
 
-The recipe set and layout every project justfile should carry, for [SKILL.md](../SKILL.md). The full golden template lives in [REFERENCE.md](../REFERENCE.md).
+The recipe set and layout every project justfile should carry, for [SKILL.md](../SKILL.md). The full golden template lives in `REFERENCE.md` at the skill root.
 
 ## Semantic Workflow Recipes
 
