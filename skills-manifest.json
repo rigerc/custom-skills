@@ -3,6 +3,12 @@
   "registryId": "rigerc/custom-skills",
   "skills": [
     {
+      "id": "rigerc/custom-skills/agnix",
+      "name": "agnix",
+      "path": "skills/agnix/SKILL.md",
+      "description": "Use when asked to lint, validate, troubleshoot, or improve AI coding-agent configuration files (SKILL.md, AGENTS.md, CLAUDE.md, hooks, MCP, or IDE agent rules), or to set up agnix checks in CI. Run the agnix CLI, explain its diagnostics, and apply explicitly requested safe fixes across Claude Code, Codex, Cursor, Copilot, Kiro, OpenCode, and related tools."
+    },
+    {
       "id": "rigerc/custom-skills/github-project-delegation",
       "name": "github-project-delegation",
       "path": "skills/github-project-delegation/SKILL.md",
@@ -21,6 +27,12 @@
       "description": "Use when building, debugging, testing, or reviewing an Ink (React terminal CLI) application. Covers Ink 8 APIs, Node and React compatibility, components, input/paste, focus, terminal dimensions, scrolling, lifecycle, accessibility, and testing."
     },
     {
+      "id": "rigerc/custom-skills/ink-testing-library",
+      "name": "ink-testing-library",
+      "path": "skills/ink-testing-library/SKILL.md",
+      "description": "Write, improve, and debug automated tests for React-based Ink terminal/CLI components using the ink-testing-library package. Use when testing rendered terminal output, interactive keyboard input, rerenders, asynchronous UI changes, stdout/stderr frames, or teardown in Ink apps. Do not use for browser React DOM tests or when only a one-shot renderToString assertion is needed."
+    },
+    {
       "id": "rigerc/custom-skills/justfile-expert",
       "name": "justfile-expert",
       "path": "skills/justfile-expert/SKILL.md",
@@ -28,9 +40,15 @@
     },
     {
       "id": "rigerc/custom-skills/knap-skill",
-      "name": "knap",
+      "name": "knap-skill",
       "path": "skills/knap-skill/SKILL.md",
       "description": "Write, explain, validate, and render Knap templates for Markdown or text output. Use for Knap variables, filters, conditions, loops, local assignments, CLI rendering, or batch generation; do not apply to unrelated Jinja, Liquid, or Mustache templates."
+    },
+    {
+      "id": "rigerc/custom-skills/readme-crafter-skill",
+      "name": "readme-crafter-skill",
+      "path": "skills/readme-crafter-skill/SKILL.md",
+      "description": "Creates repository-specific README.md files that act as landing pages, onboarding guides, and trust signals. Use when the user asks to write, rewrite, improve, audit, localize, or restructure a README, or when a codebase needs a GitHub-facing project overview. Common triggers include \"write a README\", \"improve my README\", \"generate README.md\", \"rewrite this project overview\", and \"make this repo easier to understand\". Adapts to libraries, CLI tools, apps, research repos, browser extensions, internal tools, monorepos, and bilingual README workflows."
     },
     {
       "id": "rigerc/custom-skills/serena-usage",
@@ -49,6 +67,12 @@
       "name": "vhs-cli",
       "path": "skills/vhs-cli/SKILL.md",
       "description": "Create and verify reproducible terminal recordings using Charmbracelet VHS. Use for .tape authoring, CLI/TUI demos, GIF/MP4/WebM recording, terminal screenshots, and ASCII golden fixtures. Offers simple (lint without rendering) and expanded (render, inspect, review) workflows."
+    },
+    {
+      "id": "rigerc/custom-skills/vitest-testing",
+      "name": "vitest-testing",
+      "path": "skills/vitest-testing/SKILL.md",
+      "description": "Write, configure, debug, migrate, and review JavaScript/TypeScript tests with Vitest and Vite. Use for Vitest unit tests, async assertions, mocks/spies, fake timers, DOM or Browser Mode tests, coverage, CI, workspaces, flaky tests, Jest migration, or contributions to vitest-dev/vitest."
     }
   ]
 }
