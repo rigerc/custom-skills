@@ -6,13 +6,59 @@ Create shareable AI agent skill registries for [Nosey](https://github.com/rigerc
 
 ## Skill catalog
 
-Registry: rigerc/custom-skills · 0 skills.
+Registry: rigerc/custom-skills · 8 skills.
 
 Generated from [skills-manifest.json](skills-manifest.json) and [skills-map.json](skills-map.json). Edit those sources or skill frontmatter, then regenerate this section.
 
 Recommendation conditions below are alternatives; matching any condition can recommend a skill. Technology detection is handled by Nosey.
 
-No skills are registered.
+### [github-project-delegation](skills/github-project-delegation/SKILL.md)
+
+Plan and coordinate software projects in GitHub Projects v2 using the mcp-github-project-manager MCP server. Use for backlog triage, PRD-to-issue breakdown, sprint planning, human or AI-agent delegation, cross-agent handoffs, progress/risk reporting, review gates, and blocked or stale task recovery.
+
+Available; no automatic recommendation.
+
+### [gum-cli](skills/gum-cli/SKILL.md)
+
+Use Charmbracelet Gum to build polished interactive shell scripts with prompts, selectors, filters, spinners, formatting, tables, pagers, logging, and styled terminal output. Use when writing, reviewing, or debugging shell workflows that invoke the \`gum\` CLI.
+
+Available; no automatic recommendation.
+
+### [ink](skills/ink/SKILL.md)
+
+Use when building, debugging, testing, or reviewing an Ink \(React terminal CLI\) application. Covers Ink 8 APIs, Node and React compatibility, components, input/paste, focus, terminal dimensions, scrolling, lifecycle, accessibility, and testing.
+
+Available; no automatic recommendation.
+
+### [justfile-expert](skills/justfile-expert/SKILL.md)
+
+Just command runner expertise — Justfile syntax, recipes, parameters, modules, shebang recipes. Use when authoring justfiles, project commands, or task automation.
+
+Available; no automatic recommendation.
+
+### [knap](skills/knap-skill/SKILL.md)
+
+Write, explain, validate, and render Knap templates for Markdown or text output. Use for Knap variables, filters, conditions, loops, local assignments, CLI rendering, or batch generation; do not apply to unrelated Jinja, Liquid, or Mustache templates.
+
+Available; no automatic recommendation.
+
+### [serena-usage](skills/serena-usage/SKILL.md)
+
+Serena MCP for project memory and code navigation. Use when managing Serena memories, navigating symbols, performing intelligent refactoring, or maintaining context/continuity across AI agent sessions.
+
+Available; no automatic recommendation.
+
+### [ue4ss-bridge](skills/ue4ss-bridge/SKILL.md)
+
+Inspect and manipulate a live, running Unreal Engine game through the ue4ss-bridge MCP server \(UE4SS plus the UEBridge Lua mod\). Use this whenever the user wants to examine UObjects, properties, UFunctions or class hierarchies in a running game; read or change a value live; run Lua inside the game; snapshot/diff or watch/hook values while they play; find out what the camera is aimed at; trigger UE4SS dumps \(usmap, jmap, uht, cxx\); or whenever ue4ss-bridge tools \(bridge\_status, inspect\_object, eval\_lua, snapshot\_object, watch\_property, hook\_function, poll\_events, etc.\) are available. Also trigger on mentions of UE4SS, UEBridge, Unreal game modding or reverse engineering, "the player pawn/controller", or finding offsets and property names in a live game, even if the user never names the tool.
+
+Available; no automatic recommendation.
+
+### [vhs-cli](skills/vhs-cli/SKILL.md)
+
+Create and verify reproducible terminal recordings using Charmbracelet VHS. Use for .tape authoring, CLI/TUI demos, GIF/MP4/WebM recording, terminal screenshots, and ASCII golden fixtures. Offers simple \(lint without rendering\) and expanded \(render, inspect, review\) workflows.
+
+Available; no automatic recommendation.
 
 <!-- END GENERATED SKILL CATALOG -->
 

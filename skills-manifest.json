@@ -1,5 +1,54 @@
 {
   "schemaVersion": 1,
   "registryId": "rigerc/custom-skills",
-  "skills": []
+  "skills": [
+    {
+      "id": "rigerc/custom-skills/github-project-delegation",
+      "name": "github-project-delegation",
+      "path": "skills/github-project-delegation/SKILL.md",
+      "description": "Plan and coordinate software projects in GitHub Projects v2 using the mcp-github-project-manager MCP server. Use for backlog triage, PRD-to-issue breakdown, sprint planning, human or AI-agent delegation, cross-agent handoffs, progress/risk reporting, review gates, and blocked or stale task recovery."
+    },
+    {
+      "id": "rigerc/custom-skills/gum-cli",
+      "name": "gum-cli",
+      "path": "skills/gum-cli/SKILL.md",
+      "description": "Use Charmbracelet Gum to build polished interactive shell scripts with prompts, selectors, filters, spinners, formatting, tables, pagers, logging, and styled terminal output. Use when writing, reviewing, or debugging shell workflows that invoke the `gum` CLI."
+    },
+    {
+      "id": "rigerc/custom-skills/ink",
+      "name": "ink",
+      "path": "skills/ink/SKILL.md",
+      "description": "Use when building, debugging, testing, or reviewing an Ink (React terminal CLI) application. Covers Ink 8 APIs, Node and React compatibility, components, input/paste, focus, terminal dimensions, scrolling, lifecycle, accessibility, and testing."
+    },
+    {
+      "id": "rigerc/custom-skills/justfile-expert",
+      "name": "justfile-expert",
+      "path": "skills/justfile-expert/SKILL.md",
+      "description": "Just command runner expertise — Justfile syntax, recipes, parameters, modules, shebang recipes. Use when authoring justfiles, project commands, or task automation."
+    },
+    {
+      "id": "rigerc/custom-skills/knap-skill",
+      "name": "knap",
+      "path": "skills/knap-skill/SKILL.md",
+      "description": "Write, explain, validate, and render Knap templates for Markdown or text output. Use for Knap variables, filters, conditions, loops, local assignments, CLI rendering, or batch generation; do not apply to unrelated Jinja, Liquid, or Mustache templates."
+    },
+    {
+      "id": "rigerc/custom-skills/serena-usage",
+      "name": "serena-usage",
+      "path": "skills/serena-usage/SKILL.md",
+      "description": "Serena MCP for project memory and code navigation. Use when managing Serena memories, navigating symbols, performing intelligent refactoring, or maintaining context/continuity across AI agent sessions."
+    },
+    {
+      "id": "rigerc/custom-skills/ue4ss-bridge",
+      "name": "ue4ss-bridge",
+      "path": "skills/ue4ss-bridge/SKILL.md",
+      "description": "Inspect and manipulate a live, running Unreal Engine game through the ue4ss-bridge MCP server (UE4SS plus the UEBridge Lua mod). Use this whenever the user wants to examine UObjects, properties, UFunctions or class hierarchies in a running game; read or change a value live; run Lua inside the game; snapshot/diff or watch/hook values while they play; find out what the camera is aimed at; trigger UE4SS dumps (usmap, jmap, uht, cxx); or whenever ue4ss-bridge tools (bridge_status, inspect_object, eval_lua, snapshot_object, watch_property, hook_function, poll_events, etc.) are available. Also trigger on mentions of UE4SS, UEBridge, Unreal game modding or reverse engineering, \"the player pawn/controller\", or finding offsets and property names in a live game, even if the user never names the tool."
+    },
+    {
+      "id": "rigerc/custom-skills/vhs-cli",
+      "name": "vhs-cli",
+      "path": "skills/vhs-cli/SKILL.md",
+      "description": "Create and verify reproducible terminal recordings using Charmbracelet VHS. Use for .tape authoring, CLI/TUI demos, GIF/MP4/WebM recording, terminal screenshots, and ASCII golden fixtures. Offers simple (lint without rendering) and expanded (render, inspect, review) workflows."
+    }
+  ]
 }
