@@ -3,8 +3,77 @@
   "registryId": "rigerc/custom-skills",
   "alwaysRecommend": [],
   "externalSkills": [],
-  "technologies": [],
-  "technologySkills": [],
+  "technologies": [
+    {
+      "id": "agnix",
+      "name": "agnix",
+      "detect": {
+        "packages": ["agnix"],
+        "configFiles": [".agnix.toml"]
+      },
+      "skills": ["rigerc/custom-skills/agnix"]
+    },
+    {
+      "id": "gum-cli",
+      "name": "Gum CLI",
+      "detect": {
+        "configFileContent": {
+          "files": [
+            "justfile",
+            "Justfile",
+            "JUSTFILE",
+            ".justfile",
+            "Makefile",
+            "makefile",
+            "GNUmakefile"
+          ],
+          "sourceExtensions": [".sh", ".bash"],
+          "stripComments": "hash",
+          "patterns": [
+            {
+              "source": "\\bgum[ \\t]+(?:choose|confirm|file|filter|format|input|join|log|pager|spin|style|table|write)\\b"
+            }
+          ]
+        }
+      },
+      "skills": ["rigerc/custom-skills/gum-cli"]
+    },
+    {
+      "id": "ink-testing-library",
+      "name": "Ink Testing Library",
+      "detect": {"packages": ["ink-testing-library"]},
+      "skills": ["rigerc/custom-skills/ink-testing-library"]
+    },
+    {
+      "id": "knap",
+      "name": "Knap",
+      "detect": {"packages": ["knap"]},
+      "skills": ["rigerc/custom-skills/knap-skill"]
+    },
+    {
+      "id": "serena",
+      "name": "Serena",
+      "detect": {"configFiles": [".serena/project.yml"]},
+      "skills": ["rigerc/custom-skills/serena-usage"]
+    },
+    {
+      "id": "ue4ss-bridge",
+      "name": "UE4SS Bridge",
+      "detect": {"configFiles": ["ue4ss/Mods/UEBridge"]},
+      "skills": ["rigerc/custom-skills/ue4ss-bridge"]
+    },
+    {
+      "id": "vhs",
+      "name": "VHS",
+      "detect": {"fileExtensions": [".tape"]},
+      "skills": ["rigerc/custom-skills/vhs-cli"]
+    }
+  ],
+  "technologySkills": [
+    {"technologyId": "ink", "skills": ["rigerc/custom-skills/ink"]},
+    {"technologyId": "just", "skills": ["rigerc/custom-skills/justfile-expert"]},
+    {"technologyId": "vitest", "skills": ["rigerc/custom-skills/vitest-testing"]}
+  ],
   "combinations": [],
   "combinationSkills": [],
   "frontendBonusSkills": [],

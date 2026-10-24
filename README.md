@@ -16,7 +16,9 @@ Recommendation conditions below are alternatives; matching any condition can rec
 
 Use when asked to lint, validate, troubleshoot, or improve AI coding-agent configuration files \(SKILL.md, AGENTS.md, CLAUDE.md, hooks, MCP, or IDE agent rules\), or to set up agnix checks in CI. Run the agnix CLI, explain its diagnostics, and apply explicitly requested safe fixes across Claude Code, Codex, Cursor, Copilot, Kiro, OpenCode, and related tools.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- agnix is detected \(config files: .agnix.toml; npm packages: agnix\)
 
 ### [github-project-delegation](skills/github-project-delegation/SKILL.md)
 
@@ -28,31 +30,41 @@ Available; no automatic recommendation.
 
 Use Charmbracelet Gum to build polished interactive shell scripts with prompts, selectors, filters, spinners, formatting, tables, pagers, logging, and styled terminal output. Use when writing, reviewing, or debugging shell workflows that invoke the \`gum\` CLI.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- Gum CLI is detected \(.justfile, GNUmakefile, JUSTFILE, Justfile, Makefile, justfile, makefile containing any of: /\\bgum\[ \\t\]\+\(?:choose\|confirm\|file\|filter\|format\|input\|join\|log\|pager\|spin\|style\|table\|write\)\\b/ \(source extensions: .bash, .sh; ignore hash comments\)\)
 
 ### [ink](skills/ink/SKILL.md)
 
 Use when building, debugging, testing, or reviewing an Ink \(React terminal CLI\) application. Covers Ink 8 APIs, Node and React compatibility, components, input/paste, focus, terminal dimensions, scrolling, lifecycle, accessibility, and testing.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- Ink is detected
 
 ### [ink-testing-library](skills/ink-testing-library/SKILL.md)
 
 Write, improve, and debug automated tests for React-based Ink terminal/CLI components using the ink-testing-library package. Use when testing rendered terminal output, interactive keyboard input, rerenders, asynchronous UI changes, stdout/stderr frames, or teardown in Ink apps. Do not use for browser React DOM tests or when only a one-shot renderToString assertion is needed.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- Ink Testing Library is detected \(npm packages: ink-testing-library\)
 
 ### [justfile-expert](skills/justfile-expert/SKILL.md)
 
 Just command runner expertise — Justfile syntax, recipes, parameters, modules, shebang recipes. Use when authoring justfiles, project commands, or task automation.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- Just is detected
 
 ### [knap-skill](skills/knap-skill/SKILL.md)
 
 Write, explain, validate, and render Knap templates for Markdown or text output. Use for Knap variables, filters, conditions, loops, local assignments, CLI rendering, or batch generation; do not apply to unrelated Jinja, Liquid, or Mustache templates.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- Knap is detected \(npm packages: knap\)
 
 ### [readme-crafter-skill](skills/readme-crafter-skill/SKILL.md)
 
@@ -64,25 +76,33 @@ Available; no automatic recommendation.
 
 Serena MCP for project memory and code navigation. Use when managing Serena memories, navigating symbols, performing intelligent refactoring, or maintaining context/continuity across AI agent sessions.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- Serena is detected \(config files: .serena/project.yml\)
 
 ### [ue4ss-bridge](skills/ue4ss-bridge/SKILL.md)
 
 Inspect and manipulate a live, running Unreal Engine game through the ue4ss-bridge MCP server \(UE4SS plus the UEBridge Lua mod\). Use this whenever the user wants to examine UObjects, properties, UFunctions or class hierarchies in a running game; read or change a value live; run Lua inside the game; snapshot/diff or watch/hook values while they play; find out what the camera is aimed at; trigger UE4SS dumps \(usmap, jmap, uht, cxx\); or whenever ue4ss-bridge tools \(bridge\_status, inspect\_object, eval\_lua, snapshot\_object, watch\_property, hook\_function, poll\_events, etc.\) are available. Also trigger on mentions of UE4SS, UEBridge, Unreal game modding or reverse engineering, "the player pawn/controller", or finding offsets and property names in a live game, even if the user never names the tool.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- UE4SS Bridge is detected \(config files: ue4ss/Mods/UEBridge\)
 
 ### [vhs-cli](skills/vhs-cli/SKILL.md)
 
 Create and verify reproducible terminal recordings using Charmbracelet VHS. Use for .tape authoring, CLI/TUI demos, GIF/MP4/WebM recording, terminal screenshots, and ASCII golden fixtures. Offers simple \(lint without rendering\) and expanded \(render, inspect, review\) workflows.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- VHS is detected \(file extensions: .tape\)
 
 ### [vitest-testing](skills/vitest-testing/SKILL.md)
 
 Write, configure, debug, migrate, and review JavaScript/TypeScript tests with Vitest and Vite. Use for Vitest unit tests, async assertions, mocks/spies, fake timers, DOM or Browser Mode tests, coverage, CI, workspaces, flaky tests, Jest migration, or contributions to vitest-dev/vitest.
 
-Available; no automatic recommendation.
+**Recommended when:**
+
+- Vitest is detected
 
 <!-- END GENERATED SKILL CATALOG -->
 
